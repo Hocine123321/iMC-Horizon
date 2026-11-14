@@ -1,9 +1,10 @@
-"""Draws the iMC Horizon app icons with code: a Minecraft dirt block over a horizon (a sky with a soft glow behind the block,
-stepped ground, a thin horizon line), in the two colours of a launcher theme. One icon per colour theme (the presets of
-Settings > Look); the launcher switches to the matching one when the theme changes, or the person picks one by hand
-(platform/ios/App/Swift/AppIconTheme.swift). The block is drawn exactly as the in-app mark is (BrandMark in Look.swift: six
-cells to a face, the same browns chosen by the same formula), so the icon and the mark are one picture.
-Each icon is three 1024x1024 files for iOS (any / dark / tinted), no transparency, no baked rounded corners: iOS masks it.
+"""Draws the iMC Horizon app icons with code: a Minecraft dirt block on a void background, a navy-to-wine gradient with two
+glowing colours, one in the top left corner and one in the bottom right, and nothing else. The two colours are those of a
+launcher theme. One icon per colour theme (the presets of Settings > Look); the launcher switches to the matching one when the
+theme changes, or the person picks one by hand (platform/ios/App/Swift/AppIconTheme.swift). The block is drawn exactly as the
+in-app mark is (BrandMark in Look.swift: six cells to a face, the same browns chosen by the same formula), so the icon and the
+mark are one picture. Each icon is three 1024x1024 files for iOS (any / dark / tinted), no transparency, no baked rounded
+corners: iOS masks it.
 
     python3 tools/make_app_icon.py --install   # writes every AppIcon*.appiconset into platform/ios/Assets.xcassets
     python3 tools/make_app_icon.py --check     # the presets, the asset sets and project.yml agree (CI runs this)
@@ -94,48 +95,22 @@ def draw(variant, first, second):
     global Image, ImageDraw, ImageFilter
     from PIL import Image, ImageDraw, ImageFilter          # only drawing needs Pillow; --check runs without it
     c1, c2 = rgb(first), rgb(second)
-    if variant == "light":
-        sky_top, sky_bot = mix((255, 255, 255), c1, 0.45), mix((255, 246, 232), c2, 0.35)
-        hill1, hill2 = tuple(int(v * 0.66) for v in c2), tuple(int(v * 0.50) for v in c2)
-        glow = mix((255, 255, 255), c1, 0.30)
-        line = mix((255, 255, 255), c1, 0.20)
-    else:
-        sky_top, sky_bot = (8, 12, 34), mix((14, 20, 46), c1, 0.30)
-        hill1, hill2 = mix((10, 16, 30), c2, 0.24), mix((8, 12, 24), c2, 0.13)
-        glow = c1
-        line = c1
-
-    # The sky.
-    im = Image.new("RGB", (W, W))
+    # The background is a void: navy at the top going to wine at the bottom (pale in the light icon), with the theme's first
+    # colour glowing in the top left corner and its second colour glowing in the bottom right. Nothing else.
+    top, bot = ((222, 232, 255), (255, 228, 236)) if variant == "light" else ((6, 10, 30), (30, 9, 22))
+    alpha1, alpha2 = (125, 125) if variant == "light" else (190, 190)
+    im = Image.new("RGBA", (W, W))
     d = ImageDraw.Draw(im)
     for y in range(W):
-        d.line([(0, y), (W, y)], fill=mix(sky_top, sky_bot, y / (W - 1)))
-    im = im.convert("RGBA")
+        d.line([(0, y), (W, y)], fill=tuple(int(top[i] + (bot[i] - top[i]) * y / (W - 1)) for i in range(3)) + (255,))
 
-    # A soft glow behind the block, like a sun or a moon.
-    gl = Image.new("RGBA", (W, W), (0, 0, 0, 0))
-    gd = ImageDraw.Draw(gl)
-    gcx, gcy = W // 2, int(W * 0.46)
-    for i in range(14):
-        rad = int(W * (0.40 - i * 0.022))
-        gd.ellipse([gcx - rad, gcy - rad, gcx + rad, gcy + rad], fill=glow + (int(10 + i * 7),))
-    im = Image.alpha_composite(im, gl.filter(ImageFilter.GaussianBlur(W * 0.02)))
-    d = ImageDraw.Draw(im, "RGBA")
+    def glow(center, radius, colour, alpha):
+        layer = Image.new("RGBA", (W, W), (0, 0, 0, 0))
+        ImageDraw.Draw(layer).ellipse([center[0] - radius, center[1] - radius, center[0] + radius, center[1] + radius], fill=colour + (alpha,))
+        return layer.filter(ImageFilter.GaussianBlur(radius * 0.55))
 
-    # Stepped ground made of whole blocks, in two layers, and a thin horizon line.
-    horizon_y = int(W * 0.66)
-    cell = W // 16
-
-    def hills(base, colour, seed, amp):
-        v = seed
-        for i in range(18):
-            v = (v * 37 + 11) % 7
-            hy = base - (v % amp) * cell // 2
-            d.rectangle([i * cell - cell // 2, hy, (i + 1) * cell - cell // 2, W], fill=colour)
-
-    hills(horizon_y - cell // 2, hill1, 3, 4)
-    hills(horizon_y + cell, hill2, 5, 3)
-    d.rectangle([0, horizon_y + cell // 3, W, horizon_y + cell // 3 + int(W * 0.006)], fill=line + (150,))
+    im.alpha_composite(glow((int(W * 0.15), int(W * 0.08)), int(W * 0.55), c1, alpha1))
+    im.alpha_composite(glow((int(W * 0.88), int(W * 0.96)), int(W * 0.60), c2, alpha2))
 
     # The block's soft shadow, then the block.
     sh = Image.new("RGBA", (W, W), (0, 0, 0, 0))

@@ -156,7 +156,8 @@ the thing to check first.
 ### Icon follow-up (2026-11-14)
 
 The app icon now uses the in-app mark's block (six cells to a face, same browns by the same formula in `make_app_icon.py` and
-`BrandMark`) instead of the larger, finer 16-cell block. The background went back to the original icon's style, a sky with a soft
-glow behind the block, stepped ground and a horizon line (the faint grid of squares, which was added on the first overhaul and
-never asked for, is gone), in each theme's two colours. Settings > Look has an App icon section: the match-the-theme switch and a grid of
+`BrandMark`) instead of the larger, finer 16-cell block. The background is the plain one: a navy-to-wine gradient with the theme's
+first colour glowing in the top left corner and its second in the bottom right, nothing else. (A first attempt at "the old
+background" restored the original icon's sky, stepped ground and horizon line, which was wrong and was removed the same day; the
+faint grid of squares, which was added on the first overhaul and never asked for, is gone too.) Settings > Look has an App icon section: the match-the-theme switch and a grid of
 the nine icons to pick by hand (`AppIconTheme.choose`, `IconPreview`), saved as `iconChoice:` in `launcher.txt`.
