@@ -499,6 +499,16 @@ struct BrandMark: View {
             face(0, T, TR, TL, 1.12)
             face(1, TL, C, BL, 0.86)
             face(2, C, TR, B, 0.64)
+            // A soft highlight along the two top edges that meet at the front corner, just inside the top face: blurred and about
+            // 0.3 opaque, so it reads as light on the edge and not as a line (tools/make_app_icon.py draws the same on the icon).
+            let up = r * 0.012
+            var edge = Path()
+            edge.move(to: CGPoint(x: TL.x, y: TL.y - up)); edge.addLine(to: CGPoint(x: C.x, y: C.y - up)); edge.addLine(to: CGPoint(x: TR.x, y: TR.y - up))
+            ctx.drawLayer { layer in
+                layer.addFilter(.blur(radius: r * 0.012))
+                layer.stroke(edge, with: .color(Color(red: 1, green: 0.933, blue: 0.84).opacity(0.33)),
+                             style: StrokeStyle(lineWidth: max(0.6, r * 0.022), lineCap: .round, lineJoin: .round))
+            }
         }
         .aspectRatio(1, contentMode: .fit)
         .accessibilityHidden(true)

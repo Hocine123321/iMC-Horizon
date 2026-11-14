@@ -87,7 +87,14 @@ def draw_dirt_block(im, cx, cy, r, n=6):
     face(0, T, TR, TL, 1.12)    # top
     face(1, TL, C, BL, 0.86)    # left
     face(2, C, TR, B, 0.64)     # right
-    # No outline and no rim highlight: a pale line along the top edges read as a glitch. The faces meet by shade alone.
+    # A soft highlight along the two top edges that meet at the front corner. The first version was a crisp line at half
+    # opacity and read as a glitch: this one is a blurred glow at about 0.3 opacity, lying just inside the top face (BrandMark does
+    # the same), so it reads as light catching the edge.
+    hl = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    up = r * 0.012
+    ImageDraw.Draw(hl).line([(TL[0], TL[1] - up), (C[0], C[1] - up), (TR[0], TR[1] - up)], fill=(255, 238, 214, 84),
+                            width=max(3, int(r * 0.022)), joint="curve")
+    im.alpha_composite(hl.filter(ImageFilter.GaussianBlur(r * 0.012)))
 
 
 def draw(variant, first, second):

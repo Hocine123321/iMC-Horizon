@@ -164,3 +164,7 @@ the nine icons to pick by hand (`AppIconTheme.choose`, `IconPreview`), saved as 
 
 The pale rim along the block's top edges (drawn on purpose as a highlight, in both the icon and `BrandMark`) read as a glitch on
 a phone screen and was removed from both; the faces now meet by shade alone.
+
+The rim was then put back as a soft highlight instead: the first one was a crisp line at half opacity; the new one is blurred, about
+0.3 opaque and lies just inside the top face's two front edges (`draw_dirt_block` in the icon script and `BrandMark` do the same, so
+the icon and the mark still match).
