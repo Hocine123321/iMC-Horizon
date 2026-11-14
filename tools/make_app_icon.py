@@ -87,8 +87,7 @@ def draw_dirt_block(im, cx, cy, r, n=6):
     face(0, T, TR, TL, 1.12)    # top
     face(1, TL, C, BL, 0.86)    # left
     face(2, C, TR, B, 0.64)     # right
-    # The one highlight the mark has: a light rim along the two top edges that meet at the front corner.
-    d.line([TL, C, TR], fill=(255, 235, 209, 128), width=max(3, int(r * 0.026)), joint="curve")
+    # No outline and no rim highlight: a pale line along the top edges read as a glitch. The faces meet by shade alone.
 
 
 def draw(variant, first, second):

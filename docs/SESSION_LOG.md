@@ -161,3 +161,6 @@ first colour glowing in the top left corner and its second in the bottom right, 
 background" restored the original icon's sky, stepped ground and horizon line, which was wrong and was removed the same day; the
 faint grid of squares, which was added on the first overhaul and never asked for, is gone too.) Settings > Look has an App icon section: the match-the-theme switch and a grid of
 the nine icons to pick by hand (`AppIconTheme.choose`, `IconPreview`), saved as `iconChoice:` in `launcher.txt`.
+
+The pale rim along the block's top edges (drawn on purpose as a highlight, in both the icon and `BrandMark`) read as a glitch on
+a phone screen and was removed from both; the faces now meet by shade alone.

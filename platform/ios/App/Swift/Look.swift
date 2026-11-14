@@ -499,9 +499,6 @@ struct BrandMark: View {
             face(0, T, TR, TL, 1.12)
             face(1, TL, C, BL, 0.86)
             face(2, C, TR, B, 0.64)
-            var edge = Path()
-            edge.move(to: TL); edge.addLine(to: C); edge.addLine(to: TR)
-            ctx.stroke(edge, with: .color(Color(red: 1, green: 0.92, blue: 0.82).opacity(0.5)), lineWidth: max(0.8, s * 0.012))
         }
         .aspectRatio(1, contentMode: .fit)
         .accessibilityHidden(true)
