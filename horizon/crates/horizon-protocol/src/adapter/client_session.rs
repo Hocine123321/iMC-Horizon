@@ -12,6 +12,7 @@
 //! server read itself: `login_acknowledged` and `login_finished` move each direction to configuration,
 //! `finish_configuration` to play, and `configuration_acknowledged` / `start_configuration` back.
 use std::{
+    cell::Cell,
     collections::{HashMap, VecDeque},
     sync::{
         Mutex,
@@ -19,10 +20,12 @@ use std::{
     },
 };
 
+mod biomes;
 mod step_1_20_6;
 mod step_1_21_1;
 mod step_1_21_10;
 mod step_1_21_11;
+mod step_1_21_3;
 mod step_1_21_4;
 mod step_1_21_5;
 mod step_1_21_6;
@@ -78,6 +81,10 @@ pub struct ClientSession {
     /// The entities the client was sent, by network id: their pinned type and UUID, for the older
     /// releases' entity data and 26.1's spectating by UUID.
     entities: Mutex<HashMap<i32, (i32, u128)>>,
+    /// The hotbar slot the client holds (0..=8), for the swap a 1.21.3 client's `pick_item` becomes.
+    held: AtomicU8,
+    /// Pinned biome ids -> the client's, once its biome registry lost entries its release lacks (biomes.rs).
+    biomes: Mutex<Option<biomes::BiomeMap>>,
 }
 
 /// A position, yaw and pitch.
@@ -127,6 +134,34 @@ impl Teleport {
     }
 }
 
+thread_local! {
+    /// The client's ids while [`ClientSession::older_layout_down`] runs: its steps re-read payloads already in them.
+    static CLIENT_IDS: Cell<Option<&'static Ids>> = const { Cell::new(None) };
+}
+
+/// Restores the previous client ids when dropped.
+struct ClientIds(Option<&'static Ids>);
+impl Drop for ClientIds {
+    fn drop(&mut self) {
+        CLIENT_IDS.set(self.0);
+    }
+}
+
+/// Runs `read` on a payload the renumbering already wrote in the client's ids, reading them as the pinned ones
+/// (a particle's data, say, is chosen by its pinned id).
+pub(super) fn read_in_client_ids<T>(read: impl FnOnce() -> Result<T>) -> Result<T> {
+    let _guard = CLIENT_IDS.get().map(|ids| ids::renumbering(ids, Way::Up));
+    read()
+}
+
+/// Runs `write`, writing pinned ids as the client's again (the other half of [`read_in_client_ids`]).
+pub(super) fn write_in_client_ids(write: impl FnOnce(&mut Writer)) -> Vec<u8> {
+    let _guard = CLIENT_IDS.get().map(|ids| ids::renumbering(ids, Way::Down));
+    let mut w = Writer::new();
+    write(&mut w);
+    w.data
+}
+
 impl ClientSession {
     /// A client whose login handshake stated `version`'s protocol: both directions are in login.
     pub fn new(version: ServerVersion) -> Self {
@@ -137,8 +172,47 @@ impl ClientSession {
             place: Mutex::new(Place::default()),
             teleports: Mutex::new(VecDeque::new()),
             entities: Mutex::new(HashMap::new()),
+            held: AtomicU8::new(0),
+            biomes: Mutex::new(None),
         }
     }
+    fn hold(&self, slot: i32) {
+        if let Ok(slot @ 0..=8) = u8::try_from(slot) {
+            self.held.store(slot, Ordering::Release);
+        }
+    }
+
+    /// A 1.21.3 (or older) client's `pick_item`: it found the picked block's item at `slot` of its inventory and
+    /// asks for it in its hand. 26.3 has no such packet (its client names the block or entity instead), so it
+    /// becomes the swap of that slot with the held hotbar slot, a `container_click` on the inventory. Its state id
+    /// is 0: the server applies the click and sends the inventory's full state back.
+    fn pick_item(&self, payload: &[u8]) -> Result<Option<(i32, Vec<u8>)>> {
+        let slot = Reader::new(payload).varint()?;
+        // Inventory index to the inventory menu's slot: the hotbar (0..=8) is 36..=44, the rest 9..=35 alike.
+        let slot = match slot {
+            0..=8 => slot + 36,
+            9..=35 => slot,
+            _ => return Ok(None),
+        };
+        let held = self.held.load(Ordering::Acquire);
+        if slot == 36 + i32::from(held) {
+            return Ok(None);
+        }
+        let click = play::Serverbound::ContainerClick(play::ContainerClick {
+            container: 0,
+            state: 0,
+            slot: slot as i16,
+            button: held as i8,
+            input: 2,
+            changed: Vec::new(),
+            carried: None,
+        });
+        Ok(Some((
+            packet_ids::play::serverbound::CONTAINER_CLICK,
+            strip_id(click.encode()),
+        )))
+    }
+
     pub fn reading(&self) -> State {
         from_u8(self.reading.load(Ordering::Acquire))
     }
@@ -154,6 +228,9 @@ impl ClientSession {
         if state == State::Play && id == swing_id(self.version) {
             let hand = Reader::new(&payload).varint()?;
             return Ok((hand == 0).then_some((packet_ids::play::serverbound::PUNCH, Vec::new())));
+        }
+        if state == State::Play && Some(id) == old_pick_item_id(self.version) {
+            return self.pick_item(&payload);
         }
         let Some(pinned) = self.version.serverbound_id_up(state, id) else {
             return Ok(None);
@@ -173,6 +250,11 @@ impl ClientSession {
         };
         use packet_ids::play::serverbound as sb;
         let payload = match (state, pinned) {
+            (State::Configuration, packet_ids::configuration::serverbound::SELECT_KNOWN_PACKS)
+                if biomes::own_core_pack(self.version) =>
+            {
+                biomes::core_pack_up(self.version, &payload)?
+            }
             (State::Play, sb::ACCEPT_TELEPORTATION) => self.accept_teleport(&payload)?,
             // 26.3 inserted CHANGE_DESTROY_DIRECTION at 1: 26.2's actions past 0 are one up.
             (State::Play, sb::PLAYER_ACTION) => {
@@ -182,6 +264,10 @@ impl ClientSession {
                 w.varint(if action == 0 { 0 } else { action + 1 });
                 w.bytes(r.rest());
                 w.data
+            }
+            (State::Play, sb::SET_CARRIED_ITEM) => {
+                self.hold(i32::from(Reader::new(&payload).i16()?));
+                payload
             }
             (State::Play, sb::MOVE_PLAYER_POS | sb::MOVE_PLAYER_POS_ROT | sb::MOVE_PLAYER_ROT) => {
                 self.moved(pinned, &payload)?;
@@ -223,6 +309,16 @@ impl ClientSession {
             _ => state,
         };
         self.writing.store(to_u8(next), Ordering::Release);
+        let rebiomed;
+        let payload = match self.biomes_down(state, id, payload)? {
+            // A registry the client's release doesn't synchronise is not sent.
+            Some(p) if p.is_empty() => return Ok(None),
+            Some(p) => {
+                rebiomed = p;
+                &rebiomed[..]
+            }
+            None => payload,
+        };
         // 1.21.1 has no entity_position_sync: the teleport it stands in for is sent under teleport_entity's id.
         let synced = if self.version.at_most(ServerVersion::V1_21_1) {
             step_1_21_1::entity_position_sync(state, id, payload)?
@@ -249,6 +345,9 @@ impl ClientSession {
         }
         if (state, id) == (State::Play, packet_ids::play::clientbound::PLAYER_POSITION) {
             self.teleporting(payload)?;
+        }
+        if (state, id) == (State::Play, packet_ids::play::clientbound::SET_HELD_SLOT) {
+            self.hold(Reader::new(payload).varint()?);
         }
         let tracked;
         let payload = match self.track_entities(state, id, payload)? {
@@ -343,6 +442,7 @@ impl ClientSession {
         mut payload: Vec<u8>,
     ) -> Result<Option<Vec<u8>>> {
         let v = self.version;
+        let _client_ids = ClientIds(CLIENT_IDS.replace(v.ids()));
         // 1.21.2 reworked the recipe book (recipe displays, no ids a 1.21.1 client knows): a 1.21.1 client gets no
         // recipe book, so its update_recipes and place_ghost_recipe are not sent. Its recipe_book_add, _remove and
         // _settings have no 1.21.1 id at all (the id tables drop them).
@@ -367,6 +467,12 @@ impl ClientSession {
         {
             return Ok(None);
         }
+        // 26.3's explode carries the radius right after the centre; 1.21.8 dropped it, so it is kept here for
+        // 1.21.1's strength (written at the same place, after the centre).
+        let explode_radius = (v.at_most(ServerVersion::V1_21_1)
+            && (state, id) == (State::Play, packet_ids::play::clientbound::EXPLODE))
+            .then(|| payload.get(24..28).map(|b| [b[0], b[1], b[2], b[3]]))
+            .flatten();
         type Step = fn(State, i32, &[u8]) -> Result<Option<Vec<u8>>>;
         let steps: [(ServerVersion, Step); 4] = [
             (ServerVersion::V26_1, step_26_1::clientbound),
@@ -401,11 +507,22 @@ impl ClientSession {
         {
             payload = next;
         }
+        // 1.21.2 and 1.21.3 (one protocol): 1.21.4's two additions go.
+        if v == ServerVersion::V1_21_3
+            && let Some(next) = step_1_21_3::clientbound(state, id, &payload)?
+        {
+            payload = next;
+        }
         // 1.21.1 is older than 1.21.2 and than 1.21.4: its packets are brought down after those, and before 1.20.6's.
         if v.at_most(ServerVersion::V1_21_1)
             && let Some(next) = step_1_21_1::clientbound(state, id, &payload)?
         {
             payload = next;
+        }
+        if let Some(radius) = explode_radius
+            && let Some(strength) = payload.get_mut(24..28)
+        {
+            strength.copy_from_slice(&radius);
         }
         // 1.20.6 is the oldest release: its packets are brought down after every step above.
         if v.at_most(ServerVersion::V1_20_6)
@@ -517,6 +634,68 @@ fn layout_then_ids(
 }
 
 impl ClientSession {
+    /// The client's own core pack offered, its biome registry without what its release lacks, and the
+    /// biome ids after it renumbered (biomes.rs, #15138). `None`: the pinned payload goes on as it is.
+    fn biomes_down(&self, state: State, id: i32, payload: &[u8]) -> Result<Option<Vec<u8>>> {
+        use packet_ids::{configuration::clientbound as cfg, play::clientbound as cb};
+        if !biomes::own_core_pack(self.version) {
+            return Ok(None);
+        }
+        let map = || {
+            self.biomes
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone()
+        };
+        Ok(match (state, id) {
+            (State::Configuration, cfg::REGISTRY_DATA)
+                if biomes::absent_registry(self.version, payload)? =>
+            {
+                return Ok(Some(Vec::new()));
+            }
+            (State::Configuration, cfg::SELECT_KNOWN_PACKS) => {
+                Some(biomes::core_pack_down(self.version, payload)?)
+            }
+            (State::Configuration, cfg::REGISTRY_DATA) => {
+                match biomes::registry_data(self.version, payload)? {
+                    Some((p, m)) => {
+                        *self.biomes.lock().unwrap_or_else(|e| e.into_inner()) = Some(m);
+                        Some(p)
+                    }
+                    None => None,
+                }
+            }
+            (State::Configuration, cfg::UPDATE_TAGS) => match map() {
+                Some(m) => {
+                    let mut p = configuration::Clientbound::decode(id, payload)?;
+                    if let configuration::Clientbound::UpdateTags(t) = &mut p {
+                        biomes::tags(&m, &mut t.registries);
+                    }
+                    Some(strip_id(p.encode()))
+                }
+                None => None,
+            },
+            (State::Play, cb::UPDATE_TAGS) => match map() {
+                Some(m) => {
+                    let mut p = play::Clientbound::decode(id, payload)?;
+                    if let play::Clientbound::UpdateTags(t) = &mut p {
+                        biomes::tags(&m, &mut t.registries);
+                    }
+                    Some(strip_id(p.encode()))
+                }
+                None => None,
+            },
+            (State::Play, cb::LEVEL_CHUNK_WITH_LIGHT) => match (map(), self.version.ids()) {
+                (Some(m), Some(ids)) => Some(biomes::level_chunk(&m, ids.state_bits().1, payload)?),
+                _ => None,
+            },
+            (State::Play, cb::CHUNKS_BIOMES) => match map() {
+                Some(m) => Some(biomes::chunks_biomes(&m, payload)?),
+                None => None,
+            },
+            _ => None,
+        })
+    }
     /// A `player_position` on its way: the client accepts it later by its id alone.
     fn teleporting(&self, payload: &[u8]) -> Result<()> {
         let mut r = Reader::new(payload);
@@ -581,6 +760,17 @@ enum Sent {
     Dropped,
 }
 
+/// The id of `pick_item` (1.21.3 and older) for a client of `version`, from each release's packets report.
+fn old_pick_item_id(version: ServerVersion) -> Option<i32> {
+    if version.at_most(ServerVersion::V1_21_1) {
+        Some(32)
+    } else if version.at_most(ServerVersion::V1_21_3) {
+        Some(34)
+    } else {
+        None
+    }
+}
+
 fn strip_id(body: Vec<u8>) -> Vec<u8> {
     let mut r = Reader::new(&body);
     match r.varint() {
@@ -639,6 +829,8 @@ fn down(ids: &'static Ids, state: State, id: i32, payload: &[u8]) -> Result<Sent
         | cb::LEVEL_EVENT
         | cb::BLOCK_EVENT
         | cb::UPDATE_ATTRIBUTES
+        | cb::UPDATE_MOB_EFFECT
+        | cb::REMOVE_MOB_EFFECT
         | cb::SOUND
         | cb::SOUND_ENTITY
         | cb::SET_ENTITY_DATA
@@ -703,6 +895,15 @@ fn renumber(ids: &Ids, p: &mut play::Clientbound) -> Option<()> {
         }
         play::Clientbound::BlockEvent(e) => {
             e.block = down_or_substitute(ids.block, ids.substitutes.block, e.block)?;
+            Some(())
+        }
+        // An effect the client lacks (added after its release) is not sent.
+        play::Clientbound::UpdateMobEffect(e) => {
+            e.effect = ids.mob_effect.down(e.effect)?;
+            Some(())
+        }
+        play::Clientbound::RemoveMobEffect(e) => {
+            e.effect = ids.mob_effect.down(e.effect)?;
             Some(())
         }
         play::Clientbound::UpdateAttributes(a) => {
@@ -780,6 +981,172 @@ mod tests {
 
     // Expected ids are read off the 26.2 and 26.3 packets and registries reports by hand, not from the
     // generated tables.
+
+    /// #15138: a 26.2 client is offered `minecraft:core` 26.2 (so it loads its own registry data), its
+    /// answer reaches the server as the pinned pack, and its biome registry loses `dappled_forest`.
+    #[test]
+    fn a_26_2_client_knows_its_own_core_pack_and_gets_its_own_biomes() {
+        use packet_ids::configuration::{clientbound as cfg_cb, serverbound as cfg_sb};
+        let s = ClientSession::new(ServerVersion::V26_2);
+        s.reading
+            .store(to_u8(State::Configuration), Ordering::Release);
+        s.writing
+            .store(to_u8(State::Configuration), Ordering::Release);
+        let pack = |version: &str| configuration::SelectKnownPacks {
+            packs: vec![configuration::KnownPack {
+                namespace: "minecraft".into(),
+                id: "core".into(),
+                version: version.into(),
+            }],
+        };
+        let encode = |p: &configuration::SelectKnownPacks| {
+            let mut w = Writer::new();
+            configuration::SelectKnownPacks::write(p, &mut w);
+            w.data
+        };
+        let sent = s
+            .clientbound(&body(
+                cfg_cb::SELECT_KNOWN_PACKS,
+                &encode(&pack(crate::GAME_VERSION)),
+            ))
+            .unwrap()
+            .unwrap();
+        let mut r = Reader::new(&sent);
+        r.varint().unwrap();
+        let offered = configuration::SelectKnownPacks::read(&mut r).unwrap();
+        assert_eq!(offered, pack("26.2"));
+        let old_id = ServerVersion::V26_2
+            .serverbound_id(State::Configuration, cfg_sb::SELECT_KNOWN_PACKS)
+            .unwrap();
+        let (pinned, reply) = s
+            .serverbound(old_id, encode(&pack("26.2")))
+            .unwrap()
+            .unwrap();
+        assert_eq!(pinned, cfg_sb::SELECT_KNOWN_PACKS);
+        assert_eq!(
+            configuration::SelectKnownPacks::read(&mut Reader::new(&reply)).unwrap(),
+            pack(crate::GAME_VERSION)
+        );
+        let names = [
+            "minecraft:badlands",
+            "minecraft:dappled_forest",
+            "minecraft:the_void",
+        ];
+        let mut w = Writer::new();
+        configuration::RegistryData::write(
+            &configuration::RegistryData {
+                registry: "minecraft:worldgen/biome".into(),
+                entries: names
+                    .iter()
+                    .map(|n| configuration::RegistryEntry {
+                        id: (*n).into(),
+                        data: None,
+                    })
+                    .collect(),
+            },
+            &mut w,
+        );
+        let sent = s
+            .clientbound(&body(cfg_cb::REGISTRY_DATA, &w.data))
+            .unwrap()
+            .unwrap();
+        let mut r = Reader::new(&sent);
+        r.varint().unwrap();
+        let biomes = configuration::RegistryData::read(&mut r).unwrap();
+        assert_eq!(
+            biomes
+                .entries
+                .iter()
+                .map(|e| e.id.as_str())
+                .collect::<Vec<_>>(),
+            ["minecraft:badlands", "minecraft:the_void"]
+        );
+    }
+
+    #[test]
+    fn an_effect_an_older_client_lacks_is_not_sent() {
+        let s = ClientSession::new(ServerVersion::V1_21_1);
+        s.writing.store(to_u8(State::Play), Ordering::Release);
+        let effect = |effect| {
+            play::Clientbound::UpdateMobEffect(play::UpdateMobEffect {
+                id: 1,
+                effect,
+                amplifier: 0,
+                duration: 100,
+                flags: 0,
+            })
+            .encode()
+        };
+        // Speed (0) is known to 1.21.1; pinned 39 was added after it (1.21.1 has 39 effects).
+        assert!(s.clientbound(&effect(0)).unwrap().is_some());
+        assert_eq!(s.clientbound(&effect(39)).unwrap(), None);
+        let removed =
+            play::Clientbound::RemoveMobEffect(play::RemoveMobEffect { id: 1, effect: 39 })
+                .encode();
+        assert_eq!(s.clientbound(&removed).unwrap(), None);
+    }
+
+    #[test]
+    fn a_1_21_3_pick_item_swaps_the_slot_into_the_held_hotbar_slot() {
+        let s = ClientSession::new(ServerVersion::V1_21_3);
+        s.reading.store(to_u8(State::Play), Ordering::Release);
+        s.writing.store(to_u8(State::Play), Ordering::Release);
+        // The server put the hand on hotbar slot 2.
+        let mut w = Writer::new();
+        w.varint(2);
+        s.clientbound(&body(packet_ids::play::clientbound::SET_HELD_SLOT, &w.data))
+            .unwrap();
+        // pick_item (34 in 1.21.3) of inventory index 20.
+        let mut w = Writer::new();
+        w.varint(20);
+        let (id, payload) = s.serverbound(34, w.data).unwrap().unwrap();
+        assert_eq!(id, packet_ids::play::serverbound::CONTAINER_CLICK);
+        let click = play::Serverbound::decode(id, &payload).unwrap();
+        let play::Serverbound::ContainerClick(c) = click else {
+            panic!("{click:?}");
+        };
+        assert_eq!((c.container, c.slot, c.button, c.input), (0, 20, 2, 2));
+        // A hotbar index is the menu's 36 + index; the held one itself is nothing to swap.
+        let mut w = Writer::new();
+        w.varint(2);
+        assert_eq!(s.serverbound(34, w.data).unwrap(), None);
+        // 1.21.4 clients send no pick_item: 34 is not taken over for them.
+        assert_eq!(old_pick_item_id(ServerVersion::V1_21_4), None);
+        assert_eq!(old_pick_item_id(ServerVersion::V1_20_6), Some(32));
+    }
+
+    #[test]
+    fn a_1_21_1_client_is_sent_the_real_explosion_radius() {
+        let s = ClientSession::new(ServerVersion::V1_21_1);
+        s.reading.store(to_u8(State::Play), Ordering::Release);
+        s.writing.store(to_u8(State::Play), Ordering::Release);
+        let body = play::Clientbound::Explode(play::Explode {
+            center: [1.0, 2.0, 3.0],
+            radius: 6.5,
+            block_count: 12,
+            knockback: Some([0.5, 0.1, 0.0]),
+            particle: crate::entity_data::Particle { id: 29, data: None },
+            sound: (-1, Some(("minecraft:entity.generic.explode".into(), None))),
+            block_particles: Vec::new(),
+            play_sound: true,
+        })
+        .encode();
+        // Every older client is sent it (1.21.8 and older used to fail on reading it back).
+        for v in ServerVersion::ALL {
+            let t = ClientSession::new(v);
+            t.writing.store(to_u8(State::Play), Ordering::Release);
+            assert!(t.clientbound(&body).unwrap().is_some(), "{v:?}");
+        }
+        let sent = s.clientbound(&body).unwrap().unwrap();
+        let mut r = Reader::new(&sent);
+        r.varint().unwrap();
+        assert_eq!(
+            [r.f64().unwrap(), r.f64().unwrap(), r.f64().unwrap()],
+            [1.0, 2.0, 3.0]
+        );
+        // 1.21.1's strength, after the centre: 26.3's radius, not a guess.
+        assert_eq!(r.f32().unwrap(), 6.5);
+    }
 
     #[test]
     fn each_direction_follows_its_own_switches() {
@@ -960,6 +1327,35 @@ mod tests {
         assert_eq!(slot(72), 65);
         // ocean_monument_map (1239, new in 26.3) is a filled map: filled_map (1238 in 26.3, 1133 in 26.2).
         assert_eq!(slot(1239), 1133);
+    }
+
+    /// Every client through 1.21.6 was disconnected by the first equipment with a component ("NBT at byte 1"):
+    /// 1.21.6's step read the stacks, already in the client's ids, as pinned ones.
+    #[test]
+    fn equipment_with_components_reaches_every_older_client() {
+        use crate::item::{Component, Stack, component};
+        use horizon_world::nbt::Tag;
+        let mut hat = Stack::new(1012, 1);
+        hat.added.push((
+            component::CUSTOM_NAME,
+            Component::Text(Tag::String("Santa Hat".into())),
+        ));
+        hat.added
+            .push((component::ENCHANTMENT_GLINT_OVERRIDE, Component::Bool(true)));
+        let p = play::Clientbound::SetEquipment(play::SetEquipment {
+            id: 4,
+            slots: vec![(0, Some(hat.clone())), (5, Some(hat))],
+        });
+        for v in ServerVersion::ALL {
+            if v == ServerVersion::Current || v.at_most(ServerVersion::V1_20_3) {
+                continue;
+            }
+            let s = ClientSession::new(v);
+            s.reading.store(to_u8(State::Play), Ordering::Release);
+            s.writing.store(to_u8(State::Play), Ordering::Release);
+            let sent = s.clientbound(&p.encode());
+            assert!(matches!(sent, Ok(Some(_))), "{v:?}: {sent:?}");
+        }
     }
 
     #[test]
