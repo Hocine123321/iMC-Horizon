@@ -168,3 +168,14 @@ a phone screen and was removed from both; the faces now meet by shade alone.
 The rim was then put back as a soft highlight instead: the first one was a crisp line at half opacity; the new one is blurred, about
 0.3 opaque and lies just inside the top face's two front edges (`draw_dirt_block` in the icon script and `BrandMark` do the same, so
 the icon and the mark still match).
+
+## Roadmap brought up to date (2026-11-14)
+
+`NEXT_STEPS.md` was rewritten (what is done, with where it was seen; a new work order: go through the build on the phone, finish Quit
+Game back to the launcher, measure, preparing files on the phone, sign-in, the launcher pieces that do not exist, later items). The
+roadmap's milestone table and dated notes (M5, M12 to M15, M19, M20, M22, M24), the decisions doc's milestone table and the README's
+status table now say what the repository shows: the SwiftUI launcher and its remake, touch polish (Bedrock-style controls, Shift,
+layouts), Diagnostics as a tool, Marketplace paging and descriptions, Play without closing the app (works behind a switch), the
+idle-engine and memory changes, and CI checks. Wording rule kept: **phone** only where the owner has used it and reported back,
+**CI** where it is compiled and tested but not yet seen. Still not done and said so: measurements, Quit Game back to the launcher,
+preparing files on the phone, Worlds and Screenshots pages.

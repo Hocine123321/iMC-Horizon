@@ -58,8 +58,9 @@ Requirements: an arm64 iPhone with Metal on iOS 16 or later. Development and tes
 | Area | State |
 |---|---|
 | Engine on iOS (Rust + wgpu on Metal) | Works on device |
-| SwiftUI launcher, Marketplace, file manager, diagnostics | Built |
-| Touch controls, touch editor, app lifecycle | Built |
+| SwiftUI launcher (Play, Packs, Controls, Settings), Marketplace, file manager, Diagnostics check-up | Built and in use on the owner's phone |
+| Touch controls, touch editor (game and launcher), Bedrock-style controls, app lifecycle | Built; the newest touch changes are untested on a phone |
+| Play without closing the app | Works behind a switch in Developer options; Quit Game back to the launcher is not built |
 | Crash reporter | Built |
 | Downloading and preparing game files on the phone (M8) | In progress: download written, preparation not yet |
 | Microsoft account sign-in (M9) | Code and Account screen exist; needs an approved Azure app (see [`docs/IOS_SIGN_IN.md`](docs/IOS_SIGN_IN.md)) |
