@@ -55,6 +55,7 @@ pub fn opt(o: Opt) -> Option<Reason> {
             Some(OFFLINE_ONLY)
         }
         // Everything else works on a phone.
+        PadCraftOnServers | PadNintendoButtons | PadRadialMode | PadRadialStick | Page(..) => None,
         MaxFps
         | InactivityFps
         | Fov
@@ -159,7 +160,7 @@ pub fn graphics(h: H) -> Option<Reason> {
         // The window and how frames reach it.
         PresentMode | Pacing | GraphicsApi => Some(SYSTEM),
         // HDR output is a Vulkan path in the engine; the port has no HDR yet.
-        Hdr | HdrBlackLevel | HdrKey | HdrCalibrate | HdrPeak | HdrPaperWhite | HdrUiBrightness
+        Hdr | HdrBlackLevel | HdrCalibrate | HdrPeak | HdrPaperWhite | HdrUiBrightness
         | HdrLighting | HdrSmoothGradients => Some(NOT_ON_IOS),
         // Everything else is the picture, the work done per frame, or the cache.
         ShaderPacks
@@ -197,7 +198,12 @@ pub fn graphics(h: H) -> Option<Reason> {
         | FrameGeneration
         | BatteryMode
         | ShadowCache
-        | TranslucentBatching => None,
+        | TranslucentBatching
+        | OpaqueIce
+        | ParallelTick
+        | DynamicResolution
+        | TargetFps
+        | UpscalingSharpness => None,
     }
 }
 
@@ -208,15 +214,13 @@ pub fn extra(item: crate::extras::Item) -> Option<Reason> {
         // Needs a keyboard.
         MouseTweaks | MouseTweaksWheel | ReproKeys | WheelCyclesSettings => Some(MOUSE),
         // Other programs and windows.
-        DiscordPresence => Some(OFFLINE_ONLY),
         Splitscreen => Some("Needs a second player on one screen: not in the iPhone app."),
         // The PvP & HUD page: a handful of its options are about keys.
         Pvp(o) => pvp(o),
         // Everything else changes the game itself.
         AgentControl | NoAi | Fullbright | DynamicLights | OwnNameTag | HideBlockParticles
         | AutoReconnect | UiSoundReserve | MusicPage | Sort | SortKey | ChatAnimation
-        | ChatIndicator | PackBrowser | Pregen | CosmeticsMine | CosmeticsOthers
-        | CosmeticsHideFx | CosmeticsSolo | HorizonMarks | HorizonMe => None,
+        | ChatIndicator | PackBrowser | Pregen => None,
     }
 }
 
@@ -239,8 +243,8 @@ pub fn page(p: crate::options_ui::Page) -> Option<Reason> {
         Mods | ModBrowser | ModProject | ShaderPacks | ShaderOptions | Studio | Agent | Main
         | Video | Sound | Controls | Chat | Accessibility | Language | Font | Packs | Graphics
         | GraphicsAdvanced | GraphicsImc | Controller | PadBinds | Extras | Pvp | Credits | Horizon
-        | TouchButtons
-        | Skin | Online | Music => None,
+        | TouchButtons | Added(_) | PackOptions | ControllerRadial | ControllerRadialName
+        | ControllerRadialPick | Skin | Online | Music => None,
     }
 }
 

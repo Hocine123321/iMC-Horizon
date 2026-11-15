@@ -1384,14 +1384,10 @@ impl Item {
     fn steps(self, s: &Settings, out: &EffectiveOutput) -> bool {
         self.switch(s, out).is_none()
             && self.slider(s).is_none()
-<<<<<<< HEAD
             && !matches!(
                 self,
-                Item::Horizon(H::HdrKey | H::HdrCalibrate | H::ShaderPacks) | Item::ImcDo(_)
+                Item::Horizon(H::HdrCalibrate | H::ShaderPacks) | Item::ImcDo(_)
             )
-=======
-            && !matches!(self, Item::Horizon(H::HdrCalibrate | H::ShaderPacks))
->>>>>>> main
     }
     /// On/off settings and their value.
     pub fn switch(self, s: &Settings, out: &EffectiveOutput) -> Option<bool> {
@@ -1565,38 +1561,6 @@ impl Item {
     }
 }
 
-<<<<<<< HEAD
-/// What the options screen must do after an interaction here.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Action {
-    ButtonClick,
-    Changed,
-    SliderDrag,
-    /// Wait for a key or mouse button to bind to this name.
-    BindKey(&'static str),
-    /// Start HDR calibration.
-    Calibrate,
-    /// Open the shader pack list.
-    ShaderPacks,
-    /// One of the iMC page's press rows: the options screen runs it.
-    Imc(ImcDo),
-    Done,
-}
-
-/// What the keyboard or a controller can focus.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Target {
-    Item(Item),
-    Page(Page),
-    Search,
-    Undo,
-    Done,
-}
-
-type Line = shell::Line<Page, Setting>;
-
-=======
->>>>>>> main
 /// Whether a setting is on the screen now: Upscaling only while TAA is, which does it.
 fn shown(item: Item, s: &Settings) -> bool {
     match item {
@@ -1610,7 +1574,6 @@ fn parts(item: Item, s: &Settings, out: &EffectiveOutput) -> (String, Option<Str
     shell::name_and_value(&item.label(s, out).plain())
 }
 
-<<<<<<< HEAD
 /// An iMC setting's value in the player's language ("On" and "Off" as the game's own).
 fn imc_value(i: horizon_client_input::imc_settings::Item, s: &Settings) -> String {
     match s.imc.value(i) {
@@ -1624,42 +1587,6 @@ fn imc_switch(i: horizon_client_input::imc_settings::Item, s: &Settings) -> Opti
     (s.imc.value(i) == "On" || s.imc.value(i) == "Off").then(|| s.imc.value(i) == "On")
 }
 
-pub struct GraphicsUi {
-    /// The list's scroll amount and its held scrollbar (`AbstractScrollArea`).
-    scroll: ui::Scroll,
-    dragging: Option<Item>,
-    pub focus: Option<Target>,
-    pub can_change_value: bool,
-    /// The key binding the options screen is waiting on (`Action::BindKey`).
-    pub binding: Option<&'static str>,
-    pub search: ui::EditBox,
-    /// The page the plate shows, alone, while nothing is searched.
-    page: Page,
-    /// While searching, the page last picked in the page list: current until the list scrolls.
-    picked: Option<Page>,
-    /// The settings as the screen found them, for Undo, and whether they changed since.
-    before: Option<Box<Settings>>,
-    pub changed: bool,
-}
-impl Default for GraphicsUi {
-    fn default() -> Self {
-        let mut search = ui::EditBox::new(0.0, 0.0, 0.0, 8.0);
-        search.bordered = false;
-        search.focused = false;
-        search.message = lang::get("Search options");
-        Self {
-            scroll: ui::Scroll::default(),
-            dragging: None,
-            focus: None,
-            can_change_value: false,
-            binding: None,
-            search,
-            page: Page::General,
-            picked: None,
-            before: None,
-            changed: false,
-        }
-=======
 /// A setting's row: its control, what it does (and what its chosen value does), what it costs,
 /// and why it can't be used now.
 fn row(setting: Setting, s: &Settings, out: &EffectiveOutput) -> Row<Item> {
@@ -1682,7 +1609,6 @@ fn row(setting: Setting, s: &Settings, out: &EffectiveOutput) -> Row<Item> {
             .about(about)
             .cost(setting.cost)
             .blocked(item.blocked(s, out).map(lang::get))
->>>>>>> main
     }
 }
 
@@ -1806,6 +1732,24 @@ impl Screen for GraphicsScreen {
                     Output::Push(OptionsPage::ShaderPacks),
                 ]
             }
+            // The iMC page's press rows, which do what the old page's buttons did.
+            // Each press of the phone preset steps to the next one (Mobile, Battery saver,
+            // Smooth); from custom settings the first press is Mobile.
+            Item::ImcDo(ImcDo::MobilePreset) => {
+                let next = crate::mobile_preset::current(s).map_or(
+                    crate::mobile_preset::Kind::Mobile,
+                    crate::mobile_preset::Kind::next,
+                );
+                crate::mobile_preset::apply_kind(next, s);
+                vec![Output::Event(Event::Changed)]
+            }
+            Item::ImcDo(ImcDo::EditControls) => vec![Output::Event(Event::TouchEditor)],
+            Item::ImcDo(ImcDo::Calibrate) => vec![Output::Event(Event::TouchCalibrate)],
+            Item::ImcDo(ImcDo::Reset) => {
+                s.imc.reset();
+                vec![Output::Event(Event::Changed)]
+            }
+            Item::ImcDo(ImcDo::ExtraButtons) => vec![Output::Push(OptionsPage::TouchButtons)],
             _ => {
                 item.cycle(s, back, self.framebuffer, &self.output);
                 vec![Output::Event(Event::Changed)]
@@ -1870,347 +1814,6 @@ impl Screen for GraphicsScreen {
             }
         }
         s.file.fullscreen_resolution = b.file.fullscreen_resolution.clone();
-<<<<<<< HEAD
-        self.changed = false;
-    }
-
-    pub fn draw(
-        &mut self,
-        s: &Settings,
-        batch: &mut HudBatch,
-        atlas: &HudAtlas,
-        cursor: (f32, f32),
-        in_world: bool,
-    ) {
-        self.keep(s);
-        let (w, h) = (batch.width, batch.height);
-        let (cols, lines, content) = self.layout(s, w, h);
-        shell::backdrop(batch, atlas, in_world);
-        let current = self.current(&lines);
-        self.draw_side(batch, atlas, &cols, &lines, current, cursor);
-        let focused = self.focus == Some(Target::Search);
-        shell::search_field(&mut self.search, batch, atlas, &cols, cursor, focused);
-
-        let query = self.search.value.trim();
-        let heading = if query.is_empty() {
-            lang::get(current.unwrap_or(self.page).name())
-        } else {
-            lang::get("Results for \"%s\"").replace("%s", query)
-        };
-        shell::plate(batch, atlas, &cols, &heading);
-
-        let over_list = cursor.1 >= cols.top && cursor.1 < cols.bottom;
-        let mut described = None;
-        shell::list(
-            batch,
-            atlas,
-            &cols,
-            &lines,
-            self.scroll.amount,
-            |page| lang::get(page.name()),
-            |batch, setting: Setting, y| {
-                let item = setting.item;
-                let rect = cols.row(y);
-                let hover = over_list && ui::hovered(cursor, rect[0], rect[1], rect[2], rect[3]);
-                let focused = self.focus == Some(Target::Item(item));
-                // The pointer's row wins over the keyboard's.
-                if hover || self.dragging == Some(item) || (focused && described.is_none()) {
-                    described = Some(setting);
-                }
-                self.draw_row(batch, atlas, s, &cols, item, y, hover, focused);
-            },
-        );
-        shell::scroller(batch, atlas, &cols, content, self.scroll.amount);
-        self.draw_dock(batch, atlas, s, &cols, described, current);
-
-        let mut foot = vec![(cols.button(0), "Done", Target::Done)];
-        // Undo only once there is something to undo.
-        if self.changed {
-            foot.push((cols.button(1), "Undo", Target::Undo));
-        }
-        for (rect, label, target) in foot {
-            let label = Text::literal(lang::get(label));
-            let focused = self.focus == Some(target);
-            let primary = target == Target::Done;
-            let declared = if primary {
-                crate::widgets::Action::Done
-            } else {
-                crate::widgets::Action::Apply
-            };
-            crate::widgets::declare_action(declared, rect, true);
-            shell::foot_button(batch, atlas, rect, &label, cursor, (focused, primary));
-        }
-    }
-    /// The mark over the search field, and the page list: the open page on a
-    /// plate with the accent's bar beside it, the others bare text.
-    fn draw_side(
-        &self,
-        batch: &mut HudBatch,
-        atlas: &HudAtlas,
-        cols: &Columns,
-        lines: &[Line],
-        current: Option<Page>,
-        cursor: (f32, f32),
-    ) {
-        shell::mark(batch, atlas, cols, &lang::get("Graphics"));
-        for (i, page) in Page::ALL.into_iter().enumerate() {
-            let has = self.has(page, lines);
-            let open = current == Some(page);
-            let focused = self.focus == Some(Target::Page(page));
-            let name = lang::get(page.name());
-            let flags = (has, open, focused);
-            shell::page_tab(batch, atlas, cols.page(i), &name, flags, cursor);
-        }
-    }
-    #[allow(clippy::too_many_arguments)]
-    fn draw_row(
-        &self,
-        batch: &mut HudBatch,
-        atlas: &HudAtlas,
-        s: &Settings,
-        cols: &Columns,
-        item: Item,
-        y: f32,
-        hover: bool,
-        focused: bool,
-    ) {
-        let label = item.label(s).plain();
-        let (name, value) = parts(item, s, self.binding.is_some());
-        let view = shell::RowView {
-            label: &label,
-            name: &name,
-            value: value.as_deref(),
-            switch: item.switch(s),
-            slider: item.slider(s),
-            live: item.blocked(s).is_none(),
-            hover,
-            focused,
-            held: self.dragging == Some(item),
-            key: None,
-        };
-        shell::row(batch, atlas, cols, y, &view);
-    }
-    /// The strip under the plate: the hovered or focused setting's name and
-    /// cost, then what it does (or why it can't be used now); with none, what
-    /// the open page holds.
-    fn draw_dock(
-        &self,
-        batch: &mut HudBatch,
-        atlas: &HudAtlas,
-        s: &Settings,
-        cols: &Columns,
-        setting: Option<Setting>,
-        current: Option<Page>,
-    ) {
-        let [x, y, w, _] = cols.dock;
-        style::panel(batch, atlas, cols.dock);
-        let left = x + 12.0;
-        let (text, color) = match setting {
-            Some(setting) => {
-                let (name, _) = parts(setting.item, s, false);
-                let cost = lang::get(setting.cost.label());
-                let line = style::fit(atlas, &format!("{name} · {cost}"), w - 32.0);
-                let line = Text::literal(line).with_color(setting.cost.rgb());
-                let square = [left, y + 10.0, 4.0, 4.0];
-                style::fill(batch, atlas, square, style::cost_color(setting.cost));
-                batch.text_styled(atlas, &line, left + 8.0, y + 8.0, style::WHITE, true);
-                match setting.item.blocked(s) {
-                    Some(why) => (lang::get(why), style::MUTED),
-                    None => (
-                        lang::get(description(setting.item, s, setting.text)),
-                        style::GREY,
-                    ),
-                }
-            }
-            None => {
-                let Some(page) = current else { return };
-                let name = Text::literal(lang::get(page.name()));
-                batch.text_styled(atlas, &name, left, y + 8.0, style::WHITE, true);
-                (lang::get(page.about()), style::GREY)
-            }
-        };
-        shell::dock_note(batch, atlas, cols, text, color);
-    }
-
-    /// A press (or a drag with `drag`) at `(x, y)`.
-    #[allow(clippy::too_many_arguments)]
-    pub fn click(
-        &mut self,
-        s: &mut Settings,
-        (x, y): (f32, f32),
-        (w, h): (f32, f32),
-        framebuffer: [i32; 2],
-        drag: bool,
-        right: bool,
-        shift: bool,
-    ) -> Vec<Action> {
-        self.keep(s);
-        let (cols, lines, content) = self.layout(s, w, h);
-        let at = |[rx, ry, rw, rh]: [f32; 4]| ui::hovered((x, y), rx, ry, rw, rh);
-        if drag {
-            // AbstractScrollArea.mouseDragged: the held scrollbar follows the pointer.
-            if self.scroll.held() && !cols.scrolls() {
-                self.scroll.release();
-            }
-            if self.scroll.held() {
-                self.picked = None;
-                self.scroll.drag(y, cols.top, cols.bottom, content);
-                return Vec::new();
-            }
-            if let Some(item) = self.dragging {
-                item.set_slider(s, cols.slider_at(x));
-                self.changed = true;
-                return vec![Action::SliderDrag];
-            }
-            return Vec::new();
-        }
-        if right {
-            return Vec::new();
-        }
-        if cols.scrolls()
-            && self
-                .scroll
-                .press((x, y), cols.bar_x(), cols.top, cols.bottom, content)
-        {
-            return Vec::new();
-        }
-        if at(cols.search()) {
-            if !self.search.value.is_empty() && at(cols.clear()) {
-                self.search.set_value("");
-                self.searched();
-                return vec![Action::ButtonClick];
-            }
-            self.focus = Some(Target::Search);
-            self.search.reset_blink();
-            self.search.move_cursor_to_end(false);
-            return Vec::new();
-        }
-        if self.focus == Some(Target::Search) {
-            self.focus = None;
-        }
-        if at(cols.button(0)) {
-            self.focus = Some(Target::Done);
-            return vec![Action::ButtonClick, Action::Done];
-        }
-        if self.changed && at(cols.button(1)) {
-            // Undo goes away with the change it undid.
-            self.focus = None;
-            self.undo(s);
-            return vec![Action::ButtonClick, Action::Changed];
-        }
-        for (i, page) in Page::ALL.into_iter().enumerate() {
-            if at(cols.page(i)) && self.has(page, &lines) {
-                self.focus = Some(Target::Page(page));
-                self.pick(page, &lines, &cols, content);
-                return vec![Action::ButtonClick];
-            }
-        }
-        if y < cols.top || y >= cols.bottom {
-            return Vec::new();
-        }
-        let Some(item) = lines.iter().find_map(|line| {
-            let ry = self.row_y(&cols, line);
-            let setting = line.setting?;
-            at([cols.list_x, ry, cols.list_w, style::ROW]).then_some(setting.item)
-        }) else {
-            return Vec::new();
-        };
-        // A disabled control does nothing: no sound, no preset change.
-        if item.blocked(s).is_some() {
-            return Vec::new();
-        }
-        self.focus = Some(Target::Item(item));
-        let actions = self.activate(s, item, shift, framebuffer, Some((x, &cols)));
-        self.mark(&actions);
-        actions
-    }
-    /// Press `item`: `at` is where on its row and its slider's track (`None`
-    /// from the keyboard).
-    fn activate(
-        &mut self,
-        s: &mut Settings,
-        item: Item,
-        back: bool,
-        framebuffer: [i32; 2],
-        at: Option<(f32, &Columns)>,
-    ) -> Vec<Action> {
-        match item {
-            Item::Horizon(H::HdrCalibrate) if setup(s) == Setup::Changed => {
-                s.horizon.hdr_peak = 0;
-                s.horizon.hdr_paper_white = 0;
-                vec![Action::ButtonClick, Action::Changed]
-            }
-            Item::Horizon(H::HdrCalibrate) => vec![Action::ButtonClick, Action::Calibrate],
-            Item::Horizon(H::ShaderPacks) => vec![Action::ButtonClick, Action::ShaderPacks],
-            Item::ImcDo(d) => vec![Action::ButtonClick, Action::Imc(d)],
-            Item::Horizon(H::HdrKey) => {
-                vec![
-                    Action::ButtonClick,
-                    Action::BindKey(crate::graphics::HDR_KEY),
-                ]
-            }
-            _ if item.slider(s).is_some() => {
-                self.can_change_value = true;
-                // A press on the track sets the value there; on the name, only focuses.
-                match at {
-                    Some((x, cols)) if x >= cols.track().0 => {
-                        self.dragging = Some(item);
-                        item.set_slider(s, cols.slider_at(x));
-                        vec![Action::SliderDrag]
-                    }
-                    _ => Vec::new(),
-                }
-            }
-            _ => {
-                self.can_change_value = false;
-                item.cycle(s, back, framebuffer);
-                vec![Action::ButtonClick, Action::Changed]
-            }
-        }
-    }
-    /// Lets go of a slider (true: it plays its click) or the scrollbar.
-    pub fn release(&mut self) -> bool {
-        self.scroll.release();
-        self.dragging.take().is_some()
-    }
-    /// The mouse wheel at the cursor. It scrolls the list, as vanilla's does
-    /// (`AbstractScrollArea.mouseScrolled`), except that a hovered value stepped by
-    /// `<` `>` takes the step (up goes back) while the "Scroll wheel changes settings"
-    /// extra is on. A slider, a tick box and a
-    /// focused row don't take it, wherever the focus came from: the keyboard and a
-    /// controller step them with Left and Right.
-    pub fn wheel(
-        &mut self,
-        s: &mut Settings,
-        (w, h): (f32, f32),
-        (x, y): (f32, f32),
-        framebuffer: [i32; 2],
-        amount: f32,
-    ) -> Vec<Action> {
-        if amount != 0.0 && s.extras.wheel_cycles_settings {
-            let (cols, lines, _) = self.layout(s, w, h);
-            let hovered = (y >= cols.top && y < cols.bottom)
-                .then(|| {
-                    lines.iter().find_map(|line| {
-                        let setting = line.setting?;
-                        let ry = self.row_y(&cols, line);
-                        ui::hovered((x, y), cols.list_x, ry, cols.list_w, style::ROW)
-                            .then_some(setting.item)
-                    })
-                })
-                .flatten();
-            if let Some(item) = hovered
-                && item.steps(s)
-                && item.blocked(s).is_none()
-            {
-                item.cycle(s, amount > 0.0, framebuffer);
-                self.changed = true;
-                return vec![Action::ButtonClick, Action::Changed];
-            }
-        }
-        self.scroll(s, (w, h), amount);
-=======
->>>>>>> main
         Vec::new()
     }
     /// Calibration can change what Undo puts back, as a row does.
@@ -2376,23 +1979,7 @@ mod tests {
             false,
             false,
         );
-<<<<<<< HEAD
-        let (_, lines, _) = ui.layout(&s, size.0, size.1);
-        assert_eq!(ui.current(&lines), Some(Page::Imc));
-    }
-
-    #[test]
-    fn growing_the_window_keeps_the_scroll_within_the_list() {
-        let s = Settings::default();
-        let mut ui = GraphicsUi::default();
-        ui.scroll(&s, SIZE, -1000.0);
-        assert!(ui.scroll.amount > 0.0);
-        let (cols, lines, _) = ui.layout(&s, 640.0, 4000.0);
-        assert_eq!(ui.scroll.amount, 0.0);
-        assert_eq!(ui.row_y(&cols, &lines[0]), cols.top);
-=======
-        assert_eq!(ui.current_page(&s, size), Some(Page::Hdr));
->>>>>>> main
+        assert_eq!(ui.current_page(&s, size), Some(Page::Imc));
     }
 
     #[test]
@@ -2417,17 +2004,6 @@ mod tests {
             ]
         );
         // Words of a description find it too.
-<<<<<<< HEAD
-        ui.search.set_value("tearing");
-        let (_, lines, _) = ui.layout(&s, SIZE.0, SIZE.1);
-        assert!(lines.iter().any(|l| {
-            l.setting
-                .is_some_and(|r| r.item == Item::Vanilla(Opt::Vsync))
-        }));
-        ui.search.set_value("hdr");
-        let hdr = Page::ALL.iter().position(|p| *p == Page::Hdr).unwrap();
-        let [x, y, w, h] = cols.page(hdr);
-=======
         ui.set_search("tearing");
         let found = ui.listed(&s, SIZE);
         assert!(found.iter().any(|(_, i)| *i == Item::Vanilla(Opt::Vsync)));
@@ -2440,8 +2016,8 @@ mod tests {
         ui.set_search("horizon preset");
         assert_eq!(ui.listed(&s, SIZE), [general(Item::Horizon(H::Preset))]);
         ui.set_search("hdr");
-        let [x, y, w, h] = cols.page(Page::ALL.len() - 1);
->>>>>>> main
+        let hdr = Page::ALL.iter().position(|p| *p == Page::Hdr).unwrap();
+        let [x, y, w, h] = cols.page(hdr);
         press(&mut ui, &mut s, (x + w / 2.0, y + h / 2.0));
         assert_eq!(ui.current_page(&s, SIZE), Some(Page::Hdr));
         let [x, y, ..] = cols.clear();
@@ -2654,15 +2230,9 @@ mod tests {
         key(&mut ui, &mut s, K::ArrowLeft);
         assert_eq!(ui.focused_row(), None, "{:?}", ui.focused());
         // Up from Done: the page list's last page.
-<<<<<<< HEAD
-        ui.focus = Some(Target::Done);
-        ui.key_modifiers(&mut s, K::ArrowUp, None, false, SIZE, FB);
-        assert_eq!(ui.focus, Some(Target::Page(Page::Imc)));
-=======
         ui.set_focus(Some(Target::Done));
         key(&mut ui, &mut s, K::ArrowUp);
-        assert_eq!(ui.focused(), Some(Target::Page(Page::Hdr)));
->>>>>>> main
+        assert_eq!(ui.focused(), Some(Target::Page(Page::Imc)));
         // Its row wheeled far out of view: Down takes the first row in view, as it is.
         focus_on(&mut ui, Item::Horizon(H::Preset));
         ui.scroll(&s, SIZE, -1000.0);

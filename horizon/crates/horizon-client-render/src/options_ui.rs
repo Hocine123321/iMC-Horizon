@@ -1715,22 +1715,6 @@ impl Default for OptionsUi {
         }
     }
 }
-<<<<<<< HEAD
-fn button(x: f32, y: f32, w: f32, label: Text, act: Act) -> Widget {
-    Widget {
-        x,
-        y,
-        w,
-        h: 20.0,
-        kind: WKind::Button {
-            label,
-            active: true,
-            act,
-        },
-        list: false,
-        row: 0,
-    }
-}
 /// Greys out a widget whose setting means nothing on an iPhone (`ios_unused`). A slider becomes
 /// the same inactive button `option_widget` makes for an unavailable option, which cannot be
 /// dragged; a tick box or page button just goes inactive.
@@ -1767,14 +1751,6 @@ fn unused_reason(s: &Settings, wd: &Widget) -> Option<&'static str> {
         _ => None,
     }
 }
-fn inactive(mut w: Widget) -> Widget {
-    if let WKind::Button { active, .. } = &mut w.kind {
-        *active = false;
-    }
-    w
-}
-=======
->>>>>>> main
 fn option_widget(s: &Settings, opt: Opt, x: f32, y: f32, w: f32) -> Widget {
     // OptionsSubScreen.addContents: the narrator button is active only while
     // the narrator is (`narratorButton.active = narrator.isActive()`).
@@ -1835,29 +1811,6 @@ fn wide_extras(s: &Settings, width: impl Fn(&str) -> f32) -> Vec<crate::extras::
         })
         .collect()
 }
-<<<<<<< HEAD
-/// What a button opening one of Horizon's pages says on hover.
-fn horizon_page_tooltip(page: Page) -> Option<&'static str> {
-    Some(match page {
-        Page::Horizon => "horizon.pages.settings.tooltip",
-        Page::Studio => "horizon.pages.studio.tooltip",
-        Page::Graphics => "horizon.pages.graphics.tooltip",
-        Page::GraphicsAdvanced => "horizon.pages.graphics_advanced.tooltip",
-        Page::Controller => "horizon.pages.controller.tooltip",
-        Page::Extras => "horizon.pages.extras.tooltip",
-        Page::Pvp => "horizon.pages.pvp.tooltip",
-        Page::TouchButtons => "horizon.pages.touch_buttons.tooltip",
-        Page::Agent => "horizon.pages.agent.tooltip",
-        Page::SplitProfiles => "horizon.pages.split_profiles.tooltip",
-        Page::ShaderPacks => "horizon.pages.shader_packs.tooltip",
-        Page::Mods => "horizon.pages.mods.tooltip",
-        Page::SplitSetup => "horizon.pages.split_setup.tooltip",
-        Page::Music => "horizon.pages.music.tooltip",
-        _ => return None,
-    })
-}
-=======
->>>>>>> main
 /// Rows of an OptionsList: (big?, options) or a header.
 enum Row {
     Big(Opt),
@@ -2089,18 +2042,7 @@ impl OptionsUi {
                     .pack_screen
                     .as_ref()
                     .is_some_and(|p| p.search_focused()),
-<<<<<<< HEAD
-                Page::Graphics
-                | Page::GraphicsAdvanced
-                | Page::GraphicsHdr
-                | Page::GraphicsImc => {
-                    self.graphics.typing()
-                }
-                Page::Controller | Page::PadBinds => self.controller.typing(),
-                _ if Self::shader_page(self.page()).is_some() => self.shader.typing(),
-=======
                 Page::ControllerRadialName => self.radial_name_typing(),
->>>>>>> main
                 _ => match self.shell() {
                     Some(shell) => shell.typing(),
                     None => self.settings_search_active(),
@@ -2233,161 +2175,10 @@ impl OptionsUi {
             self.studio.refresh();
         }
     }
-<<<<<<< HEAD
-    /// The open page's screen on the settings shell. This, with `shell_mut`, is all a screen
-    /// needs here: drawing, clicks, the wheel, a stick's scrolling, keys and typing all go
-    /// through them, so no input path can miss one.
-    fn shell(&self) -> Option<&dyn shell::Hosted> {
-        match self.page() {
-            Page::Extras => Some(&self.extras),
-            _ => None,
-        }
-    }
-    fn shell_mut(&mut self) -> Option<&mut dyn shell::Hosted> {
-        match self.page() {
-            Page::Extras => Some(&mut self.extras),
-            _ => None,
-        }
-    }
-    /// What a shell screen's outputs do to these options.
-    fn shell_events(&mut self, s: &mut Settings, outputs: Vec<shell::Output>) -> Vec<Event> {
-        let mut events = Vec::new();
-        for output in outputs {
-            match output {
-                shell::Output::Event(event) => events.push(event),
-                shell::Output::BindKey(name) => self.selected_key = Some(name),
-                shell::Output::Push(page) => self.push(page),
-                shell::Output::Done => events.extend(self.back(s)),
-            }
-        }
-        events
-    }
-    /// What the graphics screen's actions do to these options.
-    fn graphics_events(
-        &mut self,
-        s: &mut Settings,
-        actions: Vec<crate::graphics_ui::Action>,
-    ) -> Vec<Event> {
-        use crate::graphics_ui::Action;
-        let mut events = Vec::new();
-        for action in actions {
-            match action {
-                Action::ButtonClick => events.push(Event::ButtonClick),
-                Action::Changed => events.push(Event::Changed),
-                Action::SliderDrag => events.push(Event::SliderDrag),
-                Action::BindKey(name) => self.selected_key = Some(name),
-                Action::Calibrate => {
-                    self.calibration = Some(crate::hdr_calibration::Calibration::new(s));
-                    self.push(Page::HdrCalibration);
-                }
-                // The Shaders page's Shader Packs...: the list of either kind, as the page
-                // opens it from anywhere.
-                Action::ShaderPacks => {
-                    events.push(Event::ListShaderPacks);
-                    s.shader_options = None;
-                    events.push(Event::OpenShaderOptions);
-                    self.push(Page::ShaderPacks);
-                }
-                // The iMC page's press rows, which do what the old page's buttons did.
-                Action::Imc(what) => {
-                    use crate::graphics_ui::ImcDo;
-                    match what {
-                        // Each press steps to the next phone preset (Mobile, Battery saver,
-                        // Smooth); from custom settings the first press is Mobile.
-                        ImcDo::MobilePreset => {
-                            let next = crate::mobile_preset::current(s).map_or(
-                                crate::mobile_preset::Kind::Mobile,
-                                crate::mobile_preset::Kind::next,
-                            );
-                            crate::mobile_preset::apply_kind(next, s);
-                            events.push(Event::Changed);
-                        }
-                        ImcDo::EditControls => events.push(Event::TouchEditor),
-                        ImcDo::Calibrate => events.push(Event::TouchCalibrate),
-                        ImcDo::Reset => {
-                            s.imc.reset();
-                            events.push(Event::Changed);
-                        }
-                        ImcDo::ExtraButtons => self.push(Page::TouchButtons),
-                    }
-                }
-                Action::Done => events.extend(self.back(s)),
-            }
-        }
-        events
-    }
-    /// What the controller screen's actions do to these options.
-    fn controller_events(
-        &mut self,
-        s: &mut Settings,
-        actions: Vec<crate::controller_ui::Action>,
-    ) -> Vec<Event> {
-        use crate::controller_ui::Action;
-        let mut events = Vec::new();
-        for action in actions {
-            match action {
-                Action::ButtonClick => events.push(Event::ButtonClick),
-                Action::Changed => events.push(Event::Changed),
-                Action::SliderDrag => events.push(Event::SliderDrag),
-                Action::BindPad(action) => self.selected_pad_action = Some(action),
-                Action::Done => events.extend(self.back(s)),
-            }
-        }
-        events
-    }
-    /// What the shader screen's actions do to these options.
-    fn shader_events(
-        &mut self,
-        s: &mut Settings,
-        actions: Vec<crate::shader_ui::Action>,
-    ) -> Vec<Event> {
-        use crate::shader_ui::Action;
-        let mut events = Vec::new();
-        for action in actions {
-            match action {
-                Action::ButtonClick => events.push(Event::ButtonClick),
-                Action::Changed => events.push(Event::Changed),
-                Action::SliderDrag => events.push(Event::SliderDrag),
-                Action::Picked => {
-                    // The last pack's changed options are kept before the next one's are read.
-                    if s.shader_options.as_ref().is_some_and(|o| o.changed) {
-                        events.push(Event::ShaderOptions);
-                    }
-                    events.push(Event::ShaderPack);
-                    events.push(Event::OpenShaderOptions);
-                }
-                Action::OpenFolder => events.push(Event::OpenShaderPackFolder),
-                Action::Apply => {
-                    events.push(Event::ShaderOptions);
-                    events.push(Event::OpenShaderOptions);
-                }
-                Action::NativeChanged(pack) => events.push(Event::NativePackOptions(pack)),
-                Action::Done => events.extend(self.back(s)),
-            }
-        }
-        events
-    }
-    /// Where the shader screen opens for `page`, if it is one of its pages.
-    fn shader_page(page: Page) -> Option<crate::shader_ui::Tab> {
-        match page {
-            Page::ShaderPacks => Some(crate::shader_ui::Tab::Packs),
-            Page::ShaderOptions => Some(crate::shader_ui::Tab::Screen(0)),
-            _ => None,
-        }
-    }
-    /// Where the controller screen opens for `page`, if it is one of its pages.
-    fn controller_page(page: Page) -> Option<crate::controller_ui::Page> {
-        match page {
-            Page::Controller => Some(crate::controller_ui::Page::General),
-            Page::PadBinds => Some(crate::controller_ui::Page::Bindings),
-            _ => None,
-        }
-=======
     /// A controller's or the keyboard's focus landed on `rect`: a row of a shell screen's list
     /// that is partly hidden scrolls all into view. How far it moved down, when it moved.
     pub fn reveal(&mut self, s: &Settings, size: (f32, f32), rect: [f32; 4]) -> Option<f32> {
         self.shell_mut()?.reveal(s, size, rect)
->>>>>>> main
     }
     /// Whether a video settings screen is open, Horizon's or vanilla's: the fullscreen mode
     /// waits for it to close, and Ctrl with the wheel steps the GUI scale.
@@ -2426,18 +2217,12 @@ impl OptionsUi {
             Page::Added(i) => pages::title(i),
             Page::ShaderPacks => "horizon.pages.shader_packs",
             Page::ShaderOptions => "horizon.pages.shader_options",
-<<<<<<< HEAD
+            Page::PackOptions => "horizon.pack.options.title",
             Page::Graphics
             | Page::GraphicsAdvanced
             | Page::GraphicsHdr
             | Page::GraphicsImc
             | Page::HdrCalibration => "options.videoTitle",
-=======
-            Page::PackOptions => "horizon.pack.options.title",
-            Page::Graphics | Page::GraphicsAdvanced | Page::GraphicsHdr | Page::HdrCalibration => {
-                "options.videoTitle"
-            }
->>>>>>> main
             Page::Controller | Page::PadBinds => "horizon.pages.controller",
             Page::ControllerRadial => "horizon.pages.controller_radial",
             Page::ControllerRadialName => "horizon.radial.name_title",
@@ -2716,48 +2501,7 @@ impl OptionsUi {
                 flush(&mut rows, &mut section);
                 rows
             }
-<<<<<<< HEAD
-            Page::Horizon => {
-                // Two to a row, as vanilla's OptionsList.addSmall lays out
-                // buttons; each opens one of Horizon's settings pages. Each page has
-                // one way in: graphics and shader packs are Video Settings' (the graphics
-                // screen), the controller is Controls', mods are the Options screen's.
-                let open =
-                    |key: &str, page: Page| button(0.0, 0.0, 150.0, tr(key), Act::Push(page));
-                vec![
-                    Row::Buttons(
-                        open("horizon.pages.open.extras", Page::Extras),
-                        Some(open("horizon.pages.open.pvp", Page::Pvp)),
-                    ),
-                    Row::Buttons(
-                        open(
-                            "horizon.pages.open.split_setup",
-                            if self.split_guest {
-                                Page::SplitProfiles
-                            } else {
-                                Page::SplitSetup
-                            },
-                        ),
-                        Some(open("horizon.pages.open.studio", Page::Studio)),
-                    ),
-                    // No AI hides the AI Agent page and everything AI.
-                    Row::Buttons(
-                        self.extra_button(s, crate::extras::Item::DiscordPresence),
-                        Some(if s.extras.no_ai {
-                            self.extra_button(s, crate::extras::Item::NoAi)
-                        } else {
-                            open("horizon.pages.open.agent", Page::Agent)
-                        }),
-                    ),
-                ]
-                .into_iter()
-                .chain(
-                    (!s.extras.no_ai).then(|| {
-                        Row::Buttons(self.extra_button(s, crate::extras::Item::NoAi), None)
-                    }),
-                )
-                .collect()
-            }
+            Page::Horizon => self.horizon_rows(s),
             Page::TouchButtons => {
                 use horizon_client_input::touch_extras::{Extra, key_caption};
                 let on_off = |on: bool| {
@@ -2793,9 +2537,6 @@ impl OptionsUi {
                     Row::Buttons(toggle(Extra::Key2), Some(key(Extra::Key2))),
                 ]
             }
-=======
-            Page::Horizon => self.horizon_rows(s),
->>>>>>> main
             Page::Agent => {
                 let mut rows = vec![Row::Buttons(
                     self.extra_button(s, crate::extras::Item::AgentControl),
@@ -7919,7 +7660,7 @@ mod tests {
         // A click cycles the setting; Reset puts it back.
         let mut s = Settings::default();
         let before = s.imc.clone();
-        G::Imc(Item::LookSpeed).cycle(&mut s, false, [0, 0]);
+        G::Imc(Item::LookSpeed).cycle(&mut s, false, [0, 0], &crate::gfx::EffectiveOutput::NONE);
         assert_ne!(s.imc, before);
         s.imc.reset();
         assert_eq!(s.imc, before);
