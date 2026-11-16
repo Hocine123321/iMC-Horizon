@@ -475,6 +475,33 @@ Unarmed (every other build and run) both calls answer "no" and the window is lan
 landscape on Play. Only `horizon-client-input` was type-checked for aarch64-apple-ios locally; `horizon-client`
 needs Apple's C toolchain (`ring`), so only CI compiles that hook.
 
+### P.4 Quit Game back to the launcher: `App::Idle` (2026-11-15, step 2b, M24 stage 3)
+
+With Play without closing the app on, Quit Game no longer ends the process. The shell allows it (`horizon_ios_allow_quit`, called next to
+`horizon_ios_arm_hold`); the two Quit Game sites already asked `ios_hold::request_quit()` (P.2) and now something answers it:
+`App::about_to_wait` takes the request (`take_quit_request`, from the title screen or from the startup menu while loading), runs the game's clean
+stop (`exiting`: pads closed, world saved, reports), drops the game and its window by becoming **`App::Idle`**, re-arms the hold
+(`ios_hold::enter_idle`) and tells the shell (`horizon_ios_engine_idle`, implemented in `platform/ios/App/EngineOverlay.m`), which shows a new
+launcher. While Idle the loop wakes every 50 ms and draws nothing. The next Play (hold state Released) builds a new `Loading` from the first
+start's options (`Relaunch`, kept on the main thread only when the hold is armed) and creates a new window; from there it is a first start.
+Every other exit (a failed load, a window close, a signal) still ends the process. Unarmed, or armed without the shell's `allow_quit`, no new code
+runs and Quit Game ends the process as before.
+
+**One more edit, for memory.** `finish_game` leaked each game's loaded `Resources` (`Box::leak`) so the game could borrow them for the life of the
+process; under repeated Play and Quit that would keep one copy per cycle. When the hold is armed the first copy is kept in a static
+(`OnceLock`) and later Plays use it, dropping the copy they just loaded. This assumes the prepared game files do not change inside one run of the
+app (the packs are loaded separately); after importing or deleting game files, close the app fully. Unarmed, the leak is as before.
+
+**Not measured.** Whether dropping the game gives the memory back is the five-cycle test on the phone (`IN_PROCESS_PLAY_DESIGN.md`).
+
+| File | Change |
+|---|---|
+| `horizon/crates/horizon-client-input/src/ios_hold.rs` | `set_idle_notifier`, `enter_idle` (re-arms the hold and tells the shell once) and one test (8 in all). |
+| `horizon/crates/horizon-client/src/game/loading_screen.rs` | `App::Idle`, `Relaunch` (thread-local), `go_idle` and `play_again` (each in its own frame), the quit and Play steps in `App::about_to_wait`, and the shared `Resources` in `finish_game`. |
+| `horizon/crates/horizon-client/src/game/resource_loader.rs` | `loading_app` is `pub(super)`; `run_loading` keeps the `Relaunch` when armed and handles `App::Idle`. |
+| `horizon/crates/horizon-client/src/game.rs` | Imports `loading_app`. |
+| `horizon/platform/ios-bridge/src/lib.rs` | `horizon_ios_allow_quit`; registers the idle notifier that calls the shell's `horizon_ios_engine_idle`. |
+
 ## Q. Bedrock-style touch, steadier cursor, Shift, presets (2026-11-13)
 
 All in files that already carry iMC changes; no new file, no dependency or `Cargo.lock` change. The

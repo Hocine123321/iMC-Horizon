@@ -34,8 +34,6 @@ pub(super) fn run_event_loop(mut game: Game<'_>) -> Result<()> {
     narrator::stop();
     leave_fullscreen_after(&result, &mut game.settings);
     result?;
-    #[cfg(feature = "discord")]
-    horizon_client::discord_presence::stop();
     write_report(&game)?;
     if let Some(e) = game.error.take() {
         return Err(e);
@@ -98,9 +96,8 @@ impl Loading {
             .map_or([1280, 720], |o| o.window_size)
             .map(f64::from);
         self.fullscreen = horizon_client::window::FullscreenState::new(fullscreen);
-        let attributes = horizon_client::window::with_horizon_icon(
-            Window::default_attributes().with_title("Horizon"),
-        );
+        let attributes =
+            horizon_client::window::with_icon(Window::default_attributes().with_title("Horizon"));
         // Wayland names the window by its app id, which the horizon.desktop entry matches.
         #[cfg(target_os = "linux")]
         let attributes = winit::platform::wayland::WindowAttributesExtWayland::with_name(
@@ -108,14 +105,9 @@ impl Loading {
         );
         // `--offscreen` renders into a texture: its window would only show white.
         let window_step = startup::step("window.create");
-        let attributes = match horizon_client::window::creation_size(
-            winit::dpi::LogicalSize::new(size[0], size[1]),
-        ) {
-            Some(size) => attributes.with_inner_size(size),
-            None => attributes,
-        };
         let window = match event_loop.create_window(
             attributes
+                .with_inner_size(winit::dpi::LogicalSize::new(size[0], size[1]))
                 .with_fullscreen(fullscreen.then_some(winit::window::Fullscreen::Borderless(None)))
                 .with_visible(!self.options.as_ref().is_some_and(|o| o.offscreen)),
         ) {
@@ -127,6 +119,10 @@ impl Loading {
             }
         };
         horizon_client::window::settle_created_fullscreen(&window, fullscreen);
+        #[cfg(target_os = "windows")]
+        if let Some(hwnd) = hwnd(&window) {
+            horizon_threads::system_menu::suppress(hwnd);
+        }
         drop(window_step);
         horizon_client::telemetry::note_display(&window);
         // The renderer takes seconds to build and winit's window sits white
@@ -135,22 +131,25 @@ impl Loading {
         // redraw the same design when they start. GDI is unsafe:
         // horizon-threads holds it (this crate forbids unsafe code).
         #[cfg(target_os = "windows")]
-        let boot_paint_stop = hwnd(&window).map(|hwnd| {
-            let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-            let repaint_stop = stop.clone();
-            std::thread::spawn(move || {
-                while !repaint_stop.load(std::sync::atomic::Ordering::Relaxed) {
-                    horizon_threads::boot_paint::paint(
-                        hwnd,
-                        horizon_theme::fonts::GEIST_SEMIBOLD,
-                        horizon_theme::fonts::GEIST_MONO,
-                        &horizon_client::logging::recent_lines(),
-                    );
-                    std::thread::sleep(std::time::Duration::from_millis(300));
-                }
+        // In the fonts given to `menu_style`; with none, the window stays as it is.
+        let boot_paint_stop = hwnd(&window)
+            .zip(horizon_client::menu_style::get().fonts)
+            .map(|(hwnd, fonts)| {
+                let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+                let repaint_stop = stop.clone();
+                std::thread::spawn(move || {
+                    while !repaint_stop.load(std::sync::atomic::Ordering::Relaxed) {
+                        horizon_threads::boot_paint::paint(
+                            hwnd,
+                            fonts.semibold,
+                            fonts.mono,
+                            &horizon_client::logging::recent_lines(),
+                        );
+                        std::thread::sleep(std::time::Duration::from_millis(300));
+                    }
+                });
+                stop
             });
-            stop
-        });
         let offscreen = self.options.as_ref().is_some_and(|o| o.offscreen);
         let boot_step = startup::step("renderer.boot");
         match loading_renderer(
@@ -199,15 +198,11 @@ impl Loading {
     }
     /// The menu bundle arrived: rebuild the loading screen with the real atlas
     /// and title panorama.
-    // Not inlined: on iOS the main thread has 1 MB of stack, and this builds the second renderer.
-    // Its callers' frames must not grow by what it holds (see docs/IOS_CRASH_STACK.md).
-    #[inline(never)]
     pub(super) fn set_ui(&mut self, gui: UiResources, root: PathBuf) {
         log::info!(
             "Horizon: loading the title artwork after {} ms",
             self.started.elapsed().as_millis()
         );
-        horizon_client::gfx::breadcrumb("set_ui: title artwork arrived");
         self.menu.set_root(root, &self.settings);
         self.gui = Some(gui);
         self.title_drawn = false;
@@ -221,7 +216,6 @@ impl Loading {
             renderer.release_surface();
         }
         let bundle = self.gui.as_ref().expect("the menu bundle was just set");
-        horizon_client::gfx::breadcrumb("set_ui: building the title renderer");
         let _step = startup::step("renderer.title_artwork");
         match loading_renderer(
             window,
@@ -232,7 +226,6 @@ impl Loading {
             self.settings.horizon.api,
         ) {
             Ok(r) => {
-                horizon_client::gfx::breadcrumb("set_ui: title renderer ready");
                 horizon_client::hud::GUI_SCALE.store(self.settings.gui_scale, Ordering::Relaxed);
                 self.renderer = Some(r);
             }
@@ -253,32 +246,12 @@ impl Loading {
             event_loop.exit();
             return;
         }
-        // iMC (iOS): the window waited for Play as a portrait window; the game is landscape (ios_hold).
-        #[cfg(target_os = "ios")]
-        if horizon_client_input::ios_hold::take_landscape_switch()
-            && let Some(w) = &self.window
-        {
-            winit::platform::ios::WindowExtIOS::set_valid_orientations(
-                &**w,
-                winit::platform::ios::ValidOrientations::Landscape,
-            );
-        }
         if let Err(error) = self.poll_menu_resources() {
             self.error = Some(error);
             event_loop.exit();
             return;
         }
         self.poll_menu_realms(event_loop);
-        // iMC (iOS, Play without closing the app): while the engine waits for Play the launcher covers this window, so
-        // nothing is drawn and the loop wakes only a few times a second. It used to render the title panorama at full
-        // speed behind the launcher, which heated the phone and competed with the launcher's own drawing. Never true
-        // unless the shell armed the hold, so every other build and run behaves as before.
-        if horizon_client_input::ios_hold::state() == horizon_client_input::ios_hold::State::Waiting {
-            event_loop.set_control_flow(ControlFlow::WaitUntil(
-                Instant::now() + std::time::Duration::from_millis(50),
-            ));
-            return;
-        }
         if let Some(w) = &self.window {
             if self.options.as_ref().is_some_and(|o| o.offscreen) {
                 self.draw();
@@ -289,10 +262,6 @@ impl Loading {
         event_loop.set_control_flow(ControlFlow::Poll);
     }
     pub(super) fn draw(&mut self) {
-        // iMC (iOS): nothing is drawn while the hold waits for Play (see about_to_wait).
-        if horizon_client_input::ios_hold::state() == horizon_client_input::ios_hold::State::Waiting {
-            return;
-        }
         let Some(size) = self
             .renderer
             .as_ref()
@@ -327,17 +296,9 @@ impl Loading {
             );
         }
     }
-    // Not inlined, and small: it builds the world renderer, so on iOS (1 MB of main-thread stack)
-    // it must not hold the `Game` that `finish_game` creates afterwards. rustc reserves a
-    // function's whole frame on entry, so the two halves are two functions
-    // (docs/IOS_CRASH_STACK.md).
-    #[inline(never)]
-    pub(super) fn finish(&mut self, loaded: Loaded) -> Result<Option<Box<split::Split<'static>>>> {
-        horizon_client::gfx::breadcrumb("finish: starting the game");
+    pub(super) fn finish(&mut self, loaded: Loaded) -> Result<Option<split::Split<'static>>> {
         let handoff_at = Instant::now();
         let mut options = self.options.take().ok_or("loading already finished")?;
-        // iMC (iOS): the account the launcher wrote at Play (a no-op unless the hold was armed).
-        options.apply_late_session();
         options.resources = loaded.root.clone();
         // StartupMenu owns world selection until it can hand it to Game.
         options.world = None;
@@ -349,7 +310,6 @@ impl Loading {
             renderer.release_surface();
         }
         let renderer_at = Instant::now();
-        horizon_client::gfx::breadcrumb("finish: building the world renderer");
         let renderer = startup::time("renderer.world", || {
             build_renderer(
                 window.clone(),
@@ -360,8 +320,13 @@ impl Loading {
                 loaded.renderer_cpu,
                 self.settings.horizon.api,
                 self.settings.horizon.translucent_batching,
-                self.settings.horizon.wide_frame(),
+                self.settings.vsync,
+                &self.settings.horizon,
                 shader_packs::picked_pack_shape(&self.settings),
+                self.renderer
+                    .as_ref()
+                    .map(|r| r.display_reading())
+                    .unwrap_or_default(),
                 (
                     self.settings.file.int("textureFiltering"),
                     self.settings.file.int("maxAnisotropyBit"),
@@ -372,40 +337,7 @@ impl Loading {
             "Horizon: world renderer ready after {} ms",
             self.started.elapsed().as_millis()
         );
-        horizon_client::gfx::breadcrumb("finish: world renderer ready");
         let renderer_ms = renderer_at.elapsed().as_millis();
-        self.finish_game(
-            Handoff {
-                options,
-                gui,
-                window,
-                renderer,
-                handoff_at,
-                renderer_ms,
-            },
-            Loaded {
-                renderer_cpu: None,
-                ..loaded
-            },
-        )
-    }
-    /// The second half of `finish`: the audio device and the game itself. Its frame holds the
-    /// `Game` (hundreds of kilobytes), which is why it is not part of `finish`: the world
-    /// renderer above is built while that frame does not exist yet.
-    #[inline(never)]
-    fn finish_game(
-        &mut self,
-        handoff: Handoff,
-        loaded: Loaded,
-    ) -> Result<Option<Box<split::Split<'static>>>> {
-        let Handoff {
-            options,
-            gui,
-            window,
-            renderer,
-            handoff_at,
-            renderer_ms,
-        } = handoff;
         // Audio is created on the main thread, after the core is ready.
         let audio = if !options.execution_role.is_client() {
             Audio::silent(&options.resources)
@@ -418,9 +350,7 @@ impl Loading {
         let res: &'static Arc<Resources> = Box::leak(Box::new(loaded.resources));
         let game_at = Instant::now();
         let game_step = startup::step("handoff.start_game");
-        // The `Game` is on the heap from `Game::new_boxed` on, so this frame only holds a pointer
-        // while `start_game` runs (docs/IOS_CRASH_STACK.md).
-        let started = start_boxed(
+        let Some(mut game) = start_game(
             res,
             loaded.pack,
             gui,
@@ -433,34 +363,12 @@ impl Loading {
             Some(self.settings.clone()),
             loaded.game_cpu,
             loaded.entity_models,
-        )?;
-        let Some(game) = started else {
+        )?
+        else {
             return Ok(None);
         };
         drop(game_step);
-        horizon_client::gfx::breadcrumb("finish: game started");
-        self.finish_started(
-            game,
-            window,
-            renderer,
-            handoff_at,
-            renderer_ms,
-            game_at.elapsed().as_millis(),
-        )
-    }
-    /// The last part of `finish`: the world renderer and the window go into the game, and the
-    /// game becomes the application. Not part of `finish_game`, so that `start_game` runs without
-    /// this frame beneath it.
-    #[inline(never)]
-    fn finish_started(
-        &mut self,
-        mut game: Box<Game<'static>>,
-        window: Arc<Window>,
-        renderer: Renderer,
-        handoff_at: Instant,
-        renderer_ms: u128,
-        game_ms: u128,
-    ) -> Result<Option<Box<split::Split<'static>>>> {
+        let game_ms = game_at.elapsed().as_millis();
         game.window = Some(window);
         game.renderer = Some(renderer);
         game.world_renderer_ready = true;
@@ -481,59 +389,8 @@ impl Loading {
             renderer_ms,
             game_ms
         );
-        Ok(Some(boxed_split(game)))
+        Ok(Some(split::Split::new(game)))
     }
-}
-
-/// `start_game`, in a frame of its own so `finish_game` stays small beneath it. `start_game` and
-/// `Game::new_boxed` build the `Game` on the heap, so nothing here holds one by value.
-#[inline(never)]
-#[allow(clippy::too_many_arguments)]
-fn start_boxed(
-    res: &'static Arc<Resources>,
-    pack: PackResources,
-    gui: UiResources,
-    options: Options,
-    pack_error: Option<String>,
-    audio: Audio,
-    vanilla_root: PathBuf,
-    started: Instant,
-    rest_loader: Option<WorldRestLoader>,
-    settings: Option<Settings>,
-    prepared: Option<GameCpuResources>,
-    entity_models: Option<Arc<horizon_client::mobs::EntityModelDocument>>,
-) -> Result<Option<Box<Game<'static>>>> {
-    start_game(
-        res,
-        pack,
-        gui,
-        options,
-        pack_error,
-        audio,
-        vanilla_root,
-        started,
-        rest_loader,
-        settings,
-        prepared,
-        entity_models,
-    )
-}
-
-/// A `Split` around a boxed `Game`, built in a frame that is gone when this returns: `Split::new`
-/// takes the `Game` by value, and neither it nor the `Split` should sit in the caller's frame.
-#[inline(never)]
-fn boxed_split(game: Box<Game<'static>>) -> Box<split::Split<'static>> {
-    Box::new(split::Split::new(*game))
-}
-
-/// What `finish` hands to `finish_game`: the values it made or took before the world renderer.
-struct Handoff {
-    options: Options,
-    gui: UiResources,
-    window: Arc<Window>,
-    renderer: Renderer,
-    handoff_at: Instant,
-    renderer_ms: u128,
 }
 
 /// The application: the loading screen until the resources are ready, then
@@ -547,16 +404,6 @@ impl ApplicationHandler for App {
         match self {
             App::Loading(loading) => loading.resumed(event_loop),
             App::Ready(game) => game.resumed(event_loop),
-        }
-    }
-    fn suspended(&mut self, event_loop: &ActiveEventLoop) {
-        if let App::Ready(game) = self {
-            game.suspended(event_loop);
-        }
-    }
-    fn memory_warning(&mut self, event_loop: &ActiveEventLoop) {
-        if let App::Ready(game) = self {
-            game.memory_warning(event_loop);
         }
     }
     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
@@ -596,7 +443,7 @@ impl ApplicationHandler for App {
                     None => Step::Waiting,
                     Some(Err(e)) => Step::Failed(e.into()),
                     Some(Ok(loaded)) => match loading.finish(loaded) {
-                        Ok(Some(game)) => Step::Ready(game),
+                        Ok(Some(game)) => Step::Ready(Box::new(game)),
                         Ok(None) => Step::Done,
                         Err(e) => Step::Failed(e),
                     },
@@ -624,17 +471,26 @@ impl ApplicationHandler for App {
 
 /// Every launch reads the prepared game files (`horizon-prepare`'s output, whose
 /// manifest is `horizon-resources.json`): without them, say where they were
-/// looked for and how to get them, before a window or a loader starts.
-pub(super) fn missing_resources(root: &std::path::Path) -> Option<String> {
+/// looked for and how to get them, before a window or a loader starts. `get` is
+/// the page a hook sends the player to (`horizon_hooks::engine::get_the_game`).
+pub(super) fn missing_resources(
+    root: &std::path::Path,
+    get: Option<horizon_hooks::GetTheGame>,
+) -> Option<String> {
     let shown = std::path::absolute(root).unwrap_or_else(|_| root.to_path_buf());
     if !root.join("horizon-resources.json").is_file() {
+        let launcher = get.map_or(String::new(), |get| {
+            format!(
+                "Horizon is started from its launcher: download it at {} (Download). It needs \
+                 your own Minecraft: Java Edition; the launcher signs you in and prepares the \
+                 game files.\nDevelopers: ",
+                get.address
+            )
+        });
         return Some(format!(
             "Horizon's prepared game files are missing: no horizon-resources.json in {}\n\
-             Horizon is started from its launcher: download it at {} (Download). It needs your \
-             own Minecraft: Java Edition; the launcher signs you in and prepares the game files.\n\
-             Developers: horizon-prepare --prepare, or pass --resources <folder>",
+             {launcher}horizon-prepare --prepare, or pass --resources <folder>",
             shown.display(),
-            horizon_client::no_resources::DOWNLOAD_URL
         ));
     }
     damaged_prepared(root).map(|problem| {

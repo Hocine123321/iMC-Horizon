@@ -23,7 +23,7 @@ import lief
 # whenever the compiler or a dependency changes, which made this check fail on a good build.
 CHAIN = [
     ("run_with", ("4game8run_with",)),
-    ("run_loading", ("4game11run_loading",)),
+    ("run_loading", ("resource_loader", "11run_loading")),
     ("App::about_to_wait", ("loading_screen", "3App", "ApplicationHandler13about_to_wait")),
     ("Loading::finish", ("7Loading6finish",)),
     ("Loading::finish_game", ("7Loading11finish_game",)),

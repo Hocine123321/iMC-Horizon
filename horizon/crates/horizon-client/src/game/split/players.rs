@@ -71,14 +71,12 @@ fn turned_away(game: &Game<'_>) -> Option<String> {
     })
 }
 
-/// The `Game` `start` makes, already on the heap (`start_game` builds it there), as a plain box;
-/// a start that yields no game is an error for a guest.
+/// The `Game` `start` makes (~67 KB, by value) into a box, in a frame of its own that is gone
+/// once it is: the copies stay out of the caller's frame, deep in the event loop.
 #[inline(never)]
-fn boxed(
-    start: impl FnOnce() -> Result<Option<Box<Game<'static>>>>,
-) -> Result<Box<Game<'static>>> {
+fn boxed(start: impl FnOnce() -> Result<Option<Game<'static>>>) -> Result<Box<Game<'static>>> {
     match start() {
-        Ok(Some(game)) => Ok(game),
+        Ok(Some(game)) => Ok(Box::new(game)),
         Ok(None) => Err("the player's game did not start".into()),
         Err(e) => Err(e),
     }
@@ -128,6 +126,7 @@ impl Split<'_> {
         // Until it has a profile, a scratch options file: never P1's.
         let options = Self::folder()?.join(".joining/options.txt");
         OPTIONS.set(Some(options.clone()));
+        horizon_hooks::engine::set_seat(seat - 1);
         let mut settings = self.host.settings.clone();
         if pad.is_some() {
             // The Controller setting is P1's own: a player who pressed a pad to join plays
@@ -137,6 +136,7 @@ impl Split<'_> {
         }
         let game = self.start_guest(seat, &options, settings);
         OPTIONS.set(None);
+        horizon_hooks::engine::set_seat(0);
         let mut game = game?;
         if let Some(pad) = pad {
             // The press that joined it doesn't act in its game.
@@ -301,16 +301,31 @@ impl Split<'_> {
         }
         let profile = profiles.join(&name);
         let options = profile.join("options.txt");
-        let mut settings = if options.exists() {
-            horizon_client::settings::Settings::load(&options)
+        let made = if options.exists() {
+            None
         } else {
             std::fs::create_dir_all(&profile)?;
             let mut new = self.host.settings.clone();
             // The Controller setting is P1's, as on the profile page (`join`).
             new.controller.enabled |= self.guests[i].pad.is_some();
+            // On P1's seat, so the crates' settings stores write P1's values too.
+            let turn = horizon_hooks::seat();
+            horizon_hooks::engine::set_seat(0);
             new.save(&options);
-            new
+            horizon_hooks::engine::set_seat(turn);
+            Some(new)
         };
+        // The crates' stores load into the guest's seat, before its turn starts below.
+        let turn = horizon_hooks::seat();
+        horizon_hooks::engine::set_seat(self.guests[i].seat - 1);
+        let mut settings = match made {
+            Some(new) => {
+                horizon_client::settings::Settings::load_stores(&options);
+                new
+            }
+            None => horizon_client::settings::Settings::load(&options),
+        };
+        horizon_hooks::engine::set_seat(turn);
         // A profile an earlier join saved with P1's off, or the player's pad would be dead.
         settings.controller.enabled |= self.guests[i].pad.is_some();
         // P1's own world through memory (`Ok`), else P1's server over the network (`Err`).
@@ -503,9 +518,14 @@ impl Split<'_> {
             None,
             host.settings.horizon.api,
             host.settings.horizon.translucent_batching,
-            host.settings.horizon.wide_frame(),
+            host.settings.vsync,
+            &host.settings.horizon,
             // The pack its own game loads, from its profile.
             crate::game::shader_packs::picked_pack_shape(&guest.settings),
+            host.renderer
+                .as_ref()
+                .map(|r| r.display_reading())
+                .unwrap_or_default(),
             (
                 guest.settings.file.int("textureFiltering"),
                 guest.settings.file.int("maxAnisotropyBit"),

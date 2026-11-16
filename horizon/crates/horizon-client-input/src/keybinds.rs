@@ -300,7 +300,6 @@ pub use horizon_client_core::key_display::display_name;
 /// Q key shows A.
 pub fn learn_layout(event: &winit::event::KeyEvent) {
     use winit::keyboard::{Key, PhysicalKey};
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
     use winit::platform::modifier_supplement::KeyEventExtModifierSupplement;
     let PhysicalKey::Code(code) = event.physical_key else {
         return;
@@ -309,14 +308,7 @@ pub fn learn_layout(event: &winit::event::KeyEvent) {
         return;
     };
     let learn = horizon_client_core::key_display::learn_layout;
-    // winit offers the key without its modifiers on desktop only. Elsewhere (a hardware
-    // keyboard on iOS or Android) the logical key stands in: `learn` upper-cases it and
-    // ignores anything longer than one character, so Shift does not change what is learnt.
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
-    let key = event.key_without_modifiers();
-    #[cfg(any(target_os = "ios", target_os = "android"))]
-    let key = event.logical_key.clone();
-    match key {
+    match event.key_without_modifiers() {
         Key::Character(text) => learn(name, &text),
         Key::Dead(Some(c)) => learn(name, c.encode_utf8(&mut [0; 4])),
         _ => {}
@@ -363,6 +355,12 @@ impl KeyBinds {
     }
     pub fn is_default(&self, name: &str) -> bool {
         self.get(name) == Self::default_of(name)
+    }
+    /// `KeyBindsScreen.extractRenderState`: Reset All is active only while a
+    /// mapping differs from its default (`KeyMapping.isDefault`, the bound key
+    /// against `defaultKey`).
+    pub fn changed_from_defaults(&self) -> bool {
+        self.keys.keys().any(|name| !self.is_default(name))
     }
     pub fn set(&mut self, name: &str, key: &str) {
         if let Some((n, _, _)) = all_mappings().find(|m| m.0 == name) {
@@ -652,6 +650,22 @@ mod tests {
         assert_eq!(k.translate_all(KeyCode::Digit2), [Ok(KeyCode::Digit2)]);
         assert_eq!(k.translate_all(KeyCode::Digit9), [Ok(KeyCode::Digit9)]);
         assert_eq!(k.translate_all(KeyCode::F3), [Ok(KeyCode::F3)]);
+    }
+
+    /// `KeyBindsScreen.extractRenderState`: Reset All is active only while a
+    /// binding differs from its default.
+    #[test]
+    fn reset_all_is_active_only_after_a_binding_moves() {
+        let mut keys = KeyBinds::default();
+        assert!(!keys.changed_from_defaults());
+        keys.set("key.attack", "key.mouse.right");
+        assert!(keys.changed_from_defaults());
+        // Setting a mapping back to its own default leaves nothing to reset.
+        keys.set("key.attack", KeyBinds::default_of("key.attack"));
+        assert!(!keys.changed_from_defaults());
+        keys.set("key.jump", "key.keyboard.z");
+        keys.reset_all();
+        assert!(!keys.changed_from_defaults());
     }
     #[test]
     fn display_names() {
