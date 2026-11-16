@@ -30,7 +30,7 @@ struct DeveloperPage: View {
             SectionLabel("Experimental features")
             GlassGroup {
                 ToggleRow(symbol: "play.rectangle.fill", title: "Play without closing the app",
-                          detail: "Untested. Starts the game inside this run of the app, so Play no longer closes it. Close the app fully and open it again for this to apply. Blank screen at start? Delete the line inProcessPlay from launcher.txt in the Horizon folder.",
+                          detail: "Untested. Starts the game inside this run of the app, so Play no longer closes it, and Quit Game comes back to the launcher. Close the app fully and open it again for this to apply. Blank screen at start? Delete the line inProcessPlay from launcher.txt in the Horizon folder.",
                           isOn: $prefs.inProcessPlay)
             }
 

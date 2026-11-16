@@ -17,3 +17,11 @@ void HZEngineOverlayStart(void) {
         if ([[HZAccountStore shared] account]) [[HZAccountClient shared] recheck:^(BOOL reachable, BOOL owns, NSString *error) {}];
     });
 }
+
+// Called by the engine (horizon/platform/ios-bridge) on its main thread when Quit Game has taken it back to Idle: no
+// game, no window, waiting for the next Play. The launcher is shown again, on the next main-queue turn.
+void horizon_ios_engine_idle(void) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [HZEngineOverlay returnToLauncher];
+    });
+}

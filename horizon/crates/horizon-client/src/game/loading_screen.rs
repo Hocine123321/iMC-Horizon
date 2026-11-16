@@ -424,7 +424,15 @@ impl Loading {
         let pack_error = loaded.pack_error.or_else(|| self.pack_error.take());
         // The game borrows its shared resources for the process's lifetime,
         // like the single copy an integrated server would share.
-        let res: &'static Arc<Resources> = Box::leak(Box::new(loaded.resources));
+        // iMC (iOS, Play without closing the app): a leaked copy per Play would stay in memory through every Quit Game.
+        // When the hold is armed the first Play's copy is kept in a static and every later Play uses it (the prepared
+        // game files do not change inside one run of the app; the packs are loaded separately). Unarmed, as always.
+        let res: &'static Arc<Resources> = if horizon_client_input::ios_hold::armed() {
+            static SHARED: std::sync::OnceLock<Arc<Resources>> = std::sync::OnceLock::new();
+            SHARED.get_or_init(|| loaded.resources)
+        } else {
+            Box::leak(Box::new(loaded.resources))
+        };
         let game_at = Instant::now();
         let game_step = startup::step("handoff.start_game");
         // The `Game` is on the heap from `Game::new_boxed` on, so this frame only holds a pointer
@@ -550,12 +558,79 @@ struct Handoff {
 pub(super) enum App {
     Loading(Box<Loading>),
     Ready(Box<split::Split<'static>>),
+    /// iMC (iOS, Play without closing the app): Quit Game took the engine back here. No game, no window, nothing
+    /// loaded: the launcher is showing and the engine waits (waking every 50 ms) for the next Play, which builds a new
+    /// `Loading` exactly as a first start does. Never entered unless the shell allowed it (`ios_hold`), so every
+    /// other build and run only ever has the two states above (docs/IN_PROCESS_PLAY_DESIGN.md).
+    Idle,
 }
+
+/// What a new `Loading` needs, kept from the first start of an armed (in-process) run, so Quit Game can come back
+/// here and the next Play can start over. The main thread owns it (winit's loop), hence a thread-local.
+#[derive(Clone)]
+pub(super) struct Relaunch {
+    pub(super) options: Options,
+    pub(super) settings: Settings,
+    pub(super) vanilla_root: PathBuf,
+    pub(super) started: Instant,
+}
+thread_local! {
+    static RELAUNCH: RefCell<Option<Relaunch>> = const { RefCell::new(None) };
+}
+/// Called once by the first start when the hold is armed.
+pub(super) fn keep_relaunch(relaunch: Relaunch) {
+    RELAUNCH.with(|slot| *slot.borrow_mut() = Some(relaunch));
+}
+
+/// Quit Game under the iOS in-process Play: end the game (or the loading screen) cleanly, drop it and its window, and
+/// wait for the next Play. Its own frame so `about_to_wait`'s stays small (docs/IOS_CRASH_STACK.md).
+#[inline(never)]
+fn go_idle(app: &mut App, event_loop: &ActiveEventLoop) {
+    if let App::Ready(game) = app {
+        // The same clean stop the process end runs: pads closed, world saved (none is open at the title), reports.
+        game.exiting(event_loop);
+    }
+    // Dropping the old value frees the game, its renderer and its window.
+    *app = App::Idle;
+    event_loop.set_control_flow(ControlFlow::WaitUntil(
+        Instant::now() + std::time::Duration::from_millis(50),
+    ));
+    log::info!("Horizon: back to Idle (Quit Game), waiting for Play");
+    if !horizon_client_input::ios_hold::enter_idle() {
+        // The hold was cancelled: the app is leaving for good.
+        event_loop.exit();
+    }
+}
+
+/// Play was pressed while Idle: a new `Loading`, its window and boot renderer made now.
+#[inline(never)]
+fn play_again(app: &mut App, event_loop: &ActiveEventLoop) {
+    let Some(r) = RELAUNCH.with(|slot| slot.borrow().clone()) else {
+        log::error!("Horizon: Play while Idle, but the first start's options were not kept");
+        event_loop.exit();
+        return;
+    };
+    log::info!("Horizon: Play after Idle, loading again");
+    match loading_app(r.options, r.settings, r.vanilla_root, None, r.started) {
+        Ok(mut fresh) => {
+            if let App::Loading(loading) = &mut fresh {
+                loading.resumed(event_loop);
+            }
+            *app = fresh;
+        }
+        Err(e) => {
+            log::error!("Horizon: could not start loading again: {e}");
+            event_loop.exit();
+        }
+    }
+}
+
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         match self {
             App::Loading(loading) => loading.resumed(event_loop),
             App::Ready(game) => game.resumed(event_loop),
+            App::Idle => {}
         }
     }
     fn suspended(&mut self, event_loop: &ActiveEventLoop) {
@@ -572,6 +647,7 @@ impl ApplicationHandler for App {
         match self {
             App::Loading(loading) => loading.window_event(event_loop, id, event),
             App::Ready(game) => game.window_event(event_loop, id, event),
+            App::Idle => {}
         }
     }
     fn device_event(&mut self, event_loop: &ActiveEventLoop, id: DeviceId, event: DeviceEvent) {
@@ -585,11 +661,31 @@ impl ApplicationHandler for App {
             Ready(Box<split::Split<'static>>),
             Done,
             Failed(Box<dyn std::error::Error>),
+            /// iMC (iOS): Quit Game under in-process Play.
+            Idle,
+            /// iMC (iOS): Play was pressed while Idle.
+            Play,
         }
         let step = match self {
             App::Ready(game) => {
                 game.about_to_wait(event_loop);
-                return;
+                if !horizon_client_input::ios_hold::take_quit_request() {
+                    return;
+                }
+                Step::Idle
+            }
+            App::Idle => {
+                if horizon_client_input::ios_hold::state()
+                    == horizon_client_input::ios_hold::State::Released
+                {
+                    Step::Play
+                } else {
+                    // Nothing to draw or load: the launcher covers the screen. A few wake-ups a second.
+                    event_loop.set_control_flow(ControlFlow::WaitUntil(
+                        Instant::now() + std::time::Duration::from_millis(50),
+                    ));
+                    return;
+                }
             }
             App::Loading(loading) => {
                 loading.about_to_wait(event_loop);
@@ -597,22 +693,28 @@ impl ApplicationHandler for App {
                     event_loop.exit();
                     return;
                 }
-                match if loading.menu.reload_packs || !loading.ready_for_handoff() {
-                    None
+                if horizon_client_input::ios_hold::take_quit_request() {
+                    Step::Idle
                 } else {
-                    loading.loaded.take()
-                } {
-                    None => Step::Waiting,
-                    Some(Err(e)) => Step::Failed(e.into()),
-                    Some(Ok(loaded)) => match loading.finish(loaded) {
-                        Ok(Some(game)) => Step::Ready(game),
-                        Ok(None) => Step::Done,
-                        Err(e) => Step::Failed(e),
-                    },
+                    match if loading.menu.reload_packs || !loading.ready_for_handoff() {
+                        None
+                    } else {
+                        loading.loaded.take()
+                    } {
+                        None => Step::Waiting,
+                        Some(Err(e)) => Step::Failed(e.into()),
+                        Some(Ok(loaded)) => match loading.finish(loaded) {
+                            Ok(Some(game)) => Step::Ready(game),
+                            Ok(None) => Step::Done,
+                            Err(e) => Step::Failed(e),
+                        },
+                    }
                 }
             }
         };
         match step {
+            Step::Idle => go_idle(self, event_loop),
+            Step::Play => play_again(self, event_loop),
             Step::Waiting => {}
             Step::Ready(game) => *self = App::Ready(game),
             Step::Done => event_loop.exit(),

@@ -264,7 +264,7 @@ pub(super) fn write_report(game: &Game<'_>) -> Result<()> {
 /// its own frame lets its construction temporaries leave the 1 MB iOS main
 /// thread stack before the loading screen hands off to the game.
 #[inline(never)]
-fn loading_app(
+pub(super) fn loading_app(
     options: Options,
     settings: Settings,
     vanilla_root: PathBuf,
@@ -311,6 +311,16 @@ pub(super) fn run_loading(
     pack_error: Option<String>,
     started: Instant,
 ) -> Result<()> {
+    // iMC (iOS, Play without closing the app): Quit Game can bring the engine back to `App::Idle`, and the next Play
+    // starts a new `Loading` from these. Kept only when the shell armed the hold; every other run skips this.
+    if horizon_client_input::ios_hold::armed() {
+        loading_screen::keep_relaunch(loading_screen::Relaunch {
+            options: options.clone(),
+            settings: settings.clone(),
+            vanilla_root: vanilla_root.clone(),
+            started,
+        });
+    }
     let mut app = loading_app(options, settings, vanilla_root, pack_error, started)?;
     let result = EventLoop::new()?.run_app(&mut app);
     narrator::stop();
@@ -318,9 +328,11 @@ pub(super) fn run_loading(
         // Ready: splitscreen around P1's game.
         App::Ready(split) => leave_fullscreen_after(&result, &mut split.host.settings),
         App::Loading(loading) => leave_fullscreen_after(&result, &mut loading.settings),
+        App::Idle => {}
     }
     result?;
     match app {
+        App::Idle => {}
         App::Ready(mut split) => {
             write_report(&split.host)?;
             if let Some(e) = split.host.error.take() {

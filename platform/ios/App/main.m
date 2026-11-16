@@ -21,6 +21,8 @@
 extern void horizon_ios_main(void);
 // Play without closing the app (horizon/platform/ios-bridge). Only used when launcher.txt says inProcessPlay:true.
 extern void horizon_ios_arm_hold(void);
+// Quit Game goes back to the launcher instead of ending the app (the engine then calls horizon_ios_engine_idle, in EngineOverlay.m).
+extern void horizon_ios_allow_quit(void);
 
 int main(int argc, char *argv[]) {
     @autoreleasepool {
@@ -119,6 +121,7 @@ int main(int argc, char *argv[]) {
 
         if (inProcess) {
             horizon_ios_arm_hold();                 // the engine's loader waits for Play
+            horizon_ios_allow_quit();               // Quit Game returns to the launcher, not out of the app
             HZEngineOverlayStart();                 // puts the launcher in its own window above winit's
         }
         horizon_ios_breadcrumb("main: handing over to the engine");

@@ -612,7 +612,7 @@ pub use native_world_read::NativeBlockReadError;
 use resource_load::{Progress, launch_world, load_resources, named_scope, synchronous_startup};
 use resource_loader::{
     EntityModels, GameCpuResources, Loaded, LoaderMsg, PendingWorldEntry, WorldRestLoader,
-    run_loading, write_report,
+    loading_app, run_loading, write_report,
 };
 use std::{
     cell::RefCell,

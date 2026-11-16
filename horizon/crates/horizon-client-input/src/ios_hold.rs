@@ -117,7 +117,7 @@ pub fn take_landscape_switch() -> bool {
     *lock() == State::Released && !LANDSCAPE_SWITCHED.swap(true, SeqCst)
 }
 
-// ---- Quit Game back to the launcher (M24 stage 3, step 2; nothing calls `allow_quit_to_launcher` yet) ----
+// ---- Quit Game back to the launcher (M24 stage 3, step 2; the shell calls `allow_quit_to_launcher` when Play without closing is on) ----
 //
 // Same rule as the hold: off unless the shell turns it on, so every build behaves as before. When it is on,
 // Quit Game asks [`request_quit`] first; a `true` answer means "the shell will take the engine back to Idle,
@@ -155,6 +155,29 @@ pub fn rearm_after_quit() {
     if *state == State::Released {
         *state = State::Waiting;
     }
+}
+
+/// What the shell registers to be told the engine went Idle (the launcher must be shown again). Set once by the
+/// iOS bridge before the engine starts; never set, nobody is told.
+static IDLE_NOTIFIER: Mutex<Option<fn()>> = Mutex::new(None);
+
+/// The shell's way of hearing that Quit Game took the engine back to Idle.
+pub fn set_idle_notifier(notify: fn()) {
+    *IDLE_NOTIFIER.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(notify);
+}
+
+/// The engine dropped its game and window and is waiting for the next Play: re-arm the hold and tell the shell.
+/// Returns whether the hold went back to waiting (false when it was cancelled, so the app is leaving).
+pub fn enter_idle() -> bool {
+    rearm_after_quit();
+    let waiting = *lock() == State::Waiting;
+    if waiting {
+        let notify = *IDLE_NOTIFIER.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(notify) = notify {
+            notify();
+        }
+    }
+    waiting
 }
 
 #[cfg(test)]
@@ -264,6 +287,34 @@ mod tests {
         assert!(take_quit_request());
         assert!(!take_quit_request(), "taking it clears it");
         QUIT_ALLOWED.store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    #[test]
+    fn going_idle_rearms_and_tells_the_shell_once() {
+        use std::sync::atomic::{AtomicU32, Ordering::SeqCst};
+        static TOLD: AtomicU32 = AtomicU32::new(0);
+        let _serial = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        reset();
+        TOLD.store(0, SeqCst);
+        set_idle_notifier(|| {
+            TOLD.fetch_add(1, SeqCst);
+        });
+        arm();
+        assert!(play());
+        assert!(enter_idle());
+        assert_eq!(state(), State::Waiting);
+        assert_eq!(TOLD.load(SeqCst), 1);
+        // The next Play releases it again, and a second quit goes idle again.
+        assert!(play());
+        assert!(enter_idle());
+        assert_eq!(TOLD.load(SeqCst), 2);
+        // A cancelled hold is not re-armed and the shell is not told.
+        reset();
+        arm();
+        cancel();
+        assert!(!enter_idle());
+        assert_eq!(TOLD.load(SeqCst), 2);
+        reset();
     }
 
     #[test]

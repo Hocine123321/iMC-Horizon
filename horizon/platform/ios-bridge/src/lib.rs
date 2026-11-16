@@ -27,6 +27,8 @@ static MOD_API_LEVEL: [u8; 27] = horizon_mods::api_level::MARK;
 pub extern "C" fn horizon_ios_main() {
     std::hint::black_box(&MOD_API_LEVEL);
     let _ = horizon_client::gfx::BREADCRUMB.set(breadcrumb);
+    // Quit Game under in-process Play tells the shell here once the engine is Idle (a no-op until the shell allows it).
+    horizon_client::ios_hold::set_idle_notifier(idle_notifier);
     horizon_client::entry::main();
 }
 
@@ -61,6 +63,25 @@ pub extern "C" fn horizon_ios_hold_state() -> i32 {
         State::Released => 2,
         State::Cancelled => 3,
     }
+}
+
+/// The shell allows Quit Game to go back to the launcher instead of ending the process. Call it with
+/// [`horizon_ios_arm_hold`], before [`horizon_ios_main`]; never called, Quit Game ends the process as always.
+#[unsafe(no_mangle)]
+pub extern "C" fn horizon_ios_allow_quit() {
+    horizon_client::ios_hold::allow_quit_to_launcher();
+}
+
+unsafe extern "C" {
+    /// The shell's launcher cover (`platform/ios/App/EngineOverlay.m`): the engine went Idle after Quit Game, show
+    /// the launcher again. Called on the main thread; the shell hops to its own queue before touching UIKit.
+    fn horizon_ios_engine_idle();
+}
+
+/// What `ios_hold::enter_idle` calls.
+fn idle_notifier() {
+    // SAFETY: the shell's function takes no arguments and only schedules work on the main queue.
+    unsafe { horizon_ios_engine_idle() };
 }
 
 unsafe extern "C" {
