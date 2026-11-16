@@ -5107,9 +5107,9 @@ impl Game<'_> {
                 }
             }
             C::SetChunkCacheRadius(p) => {
+                // iMC: the render distance held to Auto Performance's cap, as at the other streaming-radius sites.
                 self.streaming.radius = self
-                    .settings
-                    .render_distance
+                    .capped_render_distance()
                     .min(p.distance.saturating_add(1))
                     .max(2);
                 if let Some(r) = self.remote.as_mut() {
