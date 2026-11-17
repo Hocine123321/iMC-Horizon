@@ -7,10 +7,11 @@ what `horizon/` holds now, why each exists, and how to put it back.
 
 ## How this stays true
 
-- **The baseline is commit `fa80441`** ("Move upstream Horizon into horizon/"), the pristine import.
-  Everything below is `git diff fa80441 HEAD -- horizon`. At the time of writing that is **63 files,
-  +9667 / -92: 19 new files, 44 modified, none deleted.** Only 92 upstream lines are removed or
-  rewritten in total; everything else is added.
+- **The baseline is commit `6a824fc`** (the pristine import of upstream Horizon `2832168`, 2026-11), recorded in
+  `docs/HORIZON_BASELINE`. Everything below is `git diff 6a824fc HEAD -- horizon`. At the time of writing that is
+  **67 files, +10869 / -132: 19 new files, 48 modified, none deleted.** Only 132 upstream lines are
+  removed or rewritten in total; everything else is added. (The first import was `fa80441`, upstream `77af961`;
+  see section R for the move.)
 - **The patches are the exact diff** (generated, not hand-written). When this prose and a patch
   disagree, the patch is right. There are two copies of the same diff:
   - `docs/horizon-changes.patch`: paths start with `horizon/`, for applying inside *this* repo.
@@ -24,7 +25,7 @@ what `horizon/` holds now, why each exists, and how to put it back.
 - **`tools/horizon_diff.sh`** regenerates the file list, the stats and the patch, and with `--check`
   fails if this file does not mention a changed path. Run it after any edit under `horizon/`, and
   add the new entry here in the same commit.
-- Only the **pristine upstream** is a valid baseline. If `fa80441` is ever lost, take the upstream
+- Only the **pristine upstream** is a valid baseline. If `6a824fc` is ever lost, take the upstream
   release the import was made from; its version is in `horizon/Cargo.toml`.
 
 ## Rule for the future
@@ -35,7 +36,7 @@ could not be built without it) and some of it (the iMC Settings page, Auto Perfo
 goes beyond a touch fix. They are listed here as the facts they are, not as approved. **Each entry
 carries a risk, so you can decide what to keep when you rebase.**
 
-Entries are grouped by what they are for, not by file. Every one of the 63 files appears once, in
+Entries are grouped by what they are for, not by file. Every one of the 67 files appears once, in
 the index at the end.
 
 ---
@@ -255,7 +256,7 @@ Three things that were wrong on the phone, fixed together because they share fil
 | `game/touch.rs` | **Back button** (`touch_back_*`): drawn over the inventory, creative, chat, command block, block editor, signs and books, which a phone cannot close by key. A finger that goes down on it is kept from the pointer and fires on lift; the first tap puts the phone's keyboard away, the next leaves like Escape. **Layout:** `pad_rect` places every button (hit test and drawing both use it), `faded` for opacity. Helpers exported for the editor. 5 tests. |
 | `game/ime.rs` | `sync_ime` honours `ime_hidden`, so Back can put the keyboard away while the text box keeps its text. |
 | `game/pad.rs` | **Controller hints.** Touch now writes its buttons and steering into `Pads::touched`, not `injected`. `state` still includes it (touch plays as before) but the "pad in use" check does not, so a finger no longer turns on the controller glyphs, the menus' controller focus, or the engine's own on-screen keyboard (which stacked on the phone's). `virtual_input` counts `touched` so input still reaches the game. |
-| `game/agent.rs`, `game/control.rs`, `game/debug_options.rs`, `game/pad_menu.rs`, `game/play_keys.rs`, `game/pointer_capture.rs`, `game/screens.rs`, `game/options.rs`, `game/startup_menu.rs` | One arm each for the new `Screen::TouchEditor` / `Event::TouchEditor`, next to `HudEditor`'s: its name for the agent and control APIs, no blur, controller pointer screen, Escape cancels, pointer released, the options event opens it. |
+| `game/agent.rs`, `game/control.rs`, `game/debug_options.rs`, `game/pad_menu.rs`, `game/play_keys.rs`, `game/screens.rs`, `game/options.rs`, `game/startup_menu.rs` | One arm each for the new `Screen::TouchEditor` / `Event::TouchEditor`, next to `HudEditor`'s: its name for the agent and control APIs, no blur, controller pointer screen, Escape cancels, pointer released, the options event opens it. |
 
 **Re-apply:** copy the two new files, add `Screen::TouchEditor` and let the compiler list every
 `match` that needs an arm (each is one line beside `HudEditor`), then re-do the `pad.rs`, `ime.rs`
@@ -475,6 +476,33 @@ Unarmed (every other build and run) both calls answer "no" and the window is lan
 landscape on Play. Only `horizon-client-input` was type-checked for aarch64-apple-ios locally; `horizon-client`
 needs Apple's C toolchain (`ring`), so only CI compiles that hook.
 
+### P.4 Quit Game back to the launcher: `App::Idle` (2026-11-15, step 2b, M24 stage 3)
+
+With Play without closing the app on, Quit Game no longer ends the process. The shell allows it (`horizon_ios_allow_quit`, called next to
+`horizon_ios_arm_hold`); the two Quit Game sites already asked `ios_hold::request_quit()` (P.2) and now something answers it:
+`App::about_to_wait` takes the request (`take_quit_request`, from the title screen or from the startup menu while loading), runs the game's clean
+stop (`exiting`: pads closed, world saved, reports), drops the game and its window by becoming **`App::Idle`**, re-arms the hold
+(`ios_hold::enter_idle`) and tells the shell (`horizon_ios_engine_idle`, implemented in `platform/ios/App/EngineOverlay.m`), which shows a new
+launcher. While Idle the loop wakes every 50 ms and draws nothing. The next Play (hold state Released) builds a new `Loading` from the first
+start's options (`Relaunch`, kept on the main thread only when the hold is armed) and creates a new window; from there it is a first start.
+Every other exit (a failed load, a window close, a signal) still ends the process. Unarmed, or armed without the shell's `allow_quit`, no new code
+runs and Quit Game ends the process as before.
+
+**One more edit, for memory.** `finish_game` leaked each game's loaded `Resources` (`Box::leak`) so the game could borrow them for the life of the
+process; under repeated Play and Quit that would keep one copy per cycle. When the hold is armed the first copy is kept in a static
+(`OnceLock`) and later Plays use it, dropping the copy they just loaded. This assumes the prepared game files do not change inside one run of the
+app (the packs are loaded separately); after importing or deleting game files, close the app fully. Unarmed, the leak is as before.
+
+**Not measured.** Whether dropping the game gives the memory back is the five-cycle test on the phone (`IN_PROCESS_PLAY_DESIGN.md`).
+
+| File | Change |
+|---|---|
+| `horizon/crates/horizon-client-input/src/ios_hold.rs` | `set_idle_notifier`, `enter_idle` (re-arms the hold and tells the shell once) and one test (8 in all). |
+| `horizon/crates/horizon-client/src/game/loading_screen.rs` | `App::Idle`, `Relaunch` (thread-local), `go_idle` and `play_again` (each in its own frame), the quit and Play steps in `App::about_to_wait`, and the shared `Resources` in `finish_game`. |
+| `horizon/crates/horizon-client/src/game/resource_loader.rs` | `loading_app` is `pub(super)`; `run_loading` keeps the `Relaunch` when armed and handles `App::Idle`. |
+| `horizon/crates/horizon-client/src/game.rs` | Imports `loading_app`. |
+| `horizon/platform/ios-bridge/src/lib.rs` | `horizon_ios_allow_quit`; registers the idle notifier that calls the shell's `horizon_ios_engine_idle`. |
+
 ## Q. Bedrock-style touch, steadier cursor, Shift, presets (2026-11-13)
 
 All in files that already carry iMC changes; no new file, no dependency or `Cargo.lock` change. The
@@ -498,7 +526,7 @@ tests; the `game/` glue is compiled by CI only.
 **Re-apply:** the `COUNT` constant and the two appended names in `touch_layout.rs`, the `PadKind::Menu`
 variant (a new match arm in `slot`, `label`, `base`), and the `Tap` and `Hold` arms in `touch_apply`.
 
-## F. Index: all 63 files
+## F. Index: all 67 files
 
 `A` = new file, `M` = modified. Section in brackets.
 
@@ -521,6 +549,7 @@ A horizon/crates/horizon-client-input/src/touch_layout.rs                [I1, K2
 M horizon/crates/horizon-client-input/src/window.rs                      [A4, A7, P]
 M horizon/crates/horizon-client-render/src/gfx.rs                        [A1, B]
 M horizon/crates/horizon-client-render/src/gfx/flat.rs                   [A6]
+M horizon/crates/horizon-client-render/src/gfx/surface_setup.rs           [A1]
 M horizon/crates/horizon-client-render/src/graphics.rs                   [A1]
 M horizon/crates/horizon-client-render/src/graphics_ui.rs                [A1, D2, O]
 A horizon/crates/horizon-client-render/src/ios_unused.rs                 [D1, K2, O]
@@ -528,6 +557,7 @@ M horizon/crates/horizon-client-render/src/lib.rs                        [D2]
 A horizon/crates/horizon-client-render/src/mobile_preset.rs              [D1]
 M horizon/crates/horizon-client-render/src/logging.rs                    [A1]
 M horizon/crates/horizon-client-render/src/options_ui.rs                 [A1, D2, I2, J2, K2, N, O]
+M horizon/crates/horizon-client-render/src/options_ui_pages.rs            [K]
 M horizon/crates/horizon-client-render/src/settings.rs                   [D2, I2, J2, K2, L2]
 M horizon/crates/horizon-client/assets/horizon/lang/en_us.json           [D2, I2, J2, K2, N, O]
 M horizon/crates/horizon-client/src/client_lib.rs                       [P]
@@ -538,6 +568,7 @@ M horizon/crates/horizon-client/src/game/chat.rs                         [M2]
 M horizon/crates/horizon-client/src/game/control.rs                      [I2, O]
 M horizon/crates/horizon-client/src/game/debug_options.rs                [I2]
 M horizon/crates/horizon-client/src/game/dedicated.rs                    [E2]
+M horizon/crates/horizon-client/src/game/launch_options.rs                [P]
 M horizon/crates/horizon-client/src/game/ime.rs                          [I2]
 M horizon/crates/horizon-client/src/game/key_codes.rs                    [M2]
 A horizon/crates/horizon-client/src/game/lifecycle.rs                    [C1]
@@ -548,9 +579,9 @@ M horizon/crates/horizon-client/src/game/options.rs                      [E2, I2
 M horizon/crates/horizon-client/src/game/pad.rs                          [C2, I2, M]
 M horizon/crates/horizon-client/src/game/pad_menu.rs                     [I2]
 M horizon/crates/horizon-client/src/game/play_keys.rs                    [I2]
-M horizon/crates/horizon-client/src/game/pointer_capture.rs              [I2]
 M horizon/crates/horizon-client/src/game/remote.rs                       [E2]
 M horizon/crates/horizon-client/src/game/render_settings.rs              [E2]
+M horizon/crates/horizon-client/src/game/resource_loader.rs               [P]
 M horizon/crates/horizon-client/src/game/screens.rs                      [I2]
 M horizon/crates/horizon-client/src/game/split.rs                        [C2]
 M horizon/crates/horizon-client/src/game/split/players.rs                [B]
@@ -564,9 +595,32 @@ M horizon/crates/horizon-client/src/game/world_session.rs                [P]
 M horizon/crates/horizon-hdr/Cargo.toml                                  [A1]
 M horizon/crates/horizon-hdr/src/lib.rs                                  [A1]
 M horizon/crates/horizon-threads/src/process_memory.rs                   [A3]
+M horizon/crates/horizon-threads/src/allocator_stats.rs                   [A3]
 A horizon/platform/ios-bridge/Cargo.toml                                 [A5]
 A horizon/platform/ios-bridge/src/lib.rs                                 [A5, P]
 ```
+
+## R. Moving horizon/ to upstream `2832168` (2026-11-15)
+
+`horizon/` was rebuilt on upstream `horizon-rust/horizon` `28321687063c25b5e0e2a9d5de96c5b2074343c7` (from `77af961`) and every change in A to Q
+re-applied by hand, because the 3-way patch conflicted too much (section G). What the new upstream changed under our edits, and where each edit
+went:
+
+- **HDR is a mode now, not a flag** (`graphics::HdrMode`): the Mobile preset sets `HdrMode::Off` (`mobile_preset.rs`); the Apple `cfg` edits of
+  `horizon-hdr` and `gfx/surface_setup.rs` (the Vulkan device open moved there from `gfx.rs`) keep HDR off on Apple (A1).
+- **The options screens were rewritten**: the iMC page is registered through `options_ui.rs`/`options_ui_pages.rs` (the page tooltip for
+  `Page::TouchButtons`, K) instead of the old row list; `graphics_ui.rs` keeps its iMC rows.
+- **`Options` moved to `game/launch_options.rs`**, so the late session read (P) lives there (`apply_late_session`, and the `ios_hold::armed()` check at the
+  session read).
+- **The pause-screen list moved to `game/screens.rs`**, which already names `Screen::TouchEditor`, so `game/pointer_capture.rs` is no longer edited.
+- **One edit was lost in the re-port and is restored**: the server's `SetChunkCacheRadius` arm in `game/remote.rs` takes the render distance through
+  `capped_render_distance()` (Auto Performance's cap, E), like the three other streaming-radius sites.
+- **`horizon-threads/src/allocator_stats.rs`**: `CStr::from_ptr(raw.cast())`, because the C character type differs per platform on newer Rust (A3).
+- `game/resource_loader.rs` is new to the list (P.4); the engine moved `run_loading` there.
+
+**The baseline.** The rebuild was committed as one commit on `horizon-update`, so the pristine upstream was added afterwards as its own commit (the
+`HORIZON_BASELINE` id) and joined to the branch with a no-change merge; `tools/horizon_diff.sh` diffs against it. Checked: the baseline's tree is
+upstream `2832168` byte for byte, and `git diff <baseline> HEAD -- horizon` is the 67 files listed in F.
 
 ## G. Rebase checklist
 

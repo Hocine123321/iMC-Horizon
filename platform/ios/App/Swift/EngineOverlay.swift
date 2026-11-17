@@ -102,6 +102,20 @@ public final class EngineOverlay: NSObject {
         }
     }
 
+    /// Quit Game took the engine back to Idle (the game and its window are gone): put the launcher up again, a new one,
+    /// in portrait. Play then goes through `horizon_ios_play()` as at start. Does nothing if the launcher is already up.
+    @objc public static func returnToLauncher() {
+        guard cover == nil else { return }
+        dismissing = false
+        horizon_ios_breadcrumb("overlay: back to the launcher after Quit Game")
+        raise(first: false)
+        // The engine's landscape window is gone: let the phone settle on the launcher's portrait now.
+        if let scene = cover?.windowScene ?? UIApplication.shared.connectedScenes.first as? UIWindowScene {
+            turn(scene, to: .portrait)
+        }
+        UIViewController.attemptRotationToDeviceOrientation()
+    }
+
     private static func waitForLandscape(_ scene: UIWindowScene?, left: Int, then done: @escaping () -> Void) {
         let landscape = scene?.interfaceOrientation.isLandscape ?? true
         if landscape || left == 0 { done(); return }

@@ -75,7 +75,7 @@ pub fn apply_kind(kind: Kind, s: &mut Settings) {
             g.lod_distance = 0;
             g.upscaling = Upscaling::Native;
             g.frame_generation = FrameGeneration::Off;
-            g.hdr = false;
+            g.hdr = graphics::HdrMode::Off;
         }
     }
 }
@@ -111,7 +111,7 @@ pub fn apply(s: &mut Settings) {
     g.lod_distance = 0;
     g.upscaling = Upscaling::Native;
     g.frame_generation = FrameGeneration::Off;
-    g.hdr = false;
+    g.hdr = graphics::HdrMode::Off;
 }
 
 #[cfg(test)]
@@ -152,7 +152,7 @@ mod tests {
         s.horizon.lod_distance = 512;
         s.horizon.upscaling = Upscaling::Quality;
         s.horizon.frame_generation = FrameGeneration::Fsr31;
-        s.horizon.hdr = true;
+        s.horizon.hdr = graphics::HdrMode::On;
         s.render_distance = 32;
         s.max_fps = 260;
         apply(&mut s);
@@ -160,7 +160,7 @@ mod tests {
         assert_eq!(s.horizon.lod_distance, 0);
         assert_eq!(s.horizon.upscaling, Upscaling::Native);
         assert_eq!(s.horizon.frame_generation, FrameGeneration::Off);
-        assert!(!s.horizon.hdr);
+        assert_eq!(s.horizon.hdr, graphics::HdrMode::Off);
         assert_eq!(s.render_distance, 8);
         assert_eq!(s.max_fps, 60);
     }
