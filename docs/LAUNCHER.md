@@ -53,12 +53,12 @@ two runs of the app:
 3. **Open** again: `main.m` finds the flag, deletes it, checks the game files, and starts the engine.
 4. Close the game and open the app: no flag, so the launcher is back.
 
-**Play without closing the app (experimental, off by default; built 2026-11-11, tried on the owner's phone that day and in use since; the idle-engine fix is from 2026-11-13; Quit Game still ends the app).**
+**Play without closing the app (experimental, off by default; built 2026-11-11, tried on the owner's phone that day and in use since; the idle-engine fix is from 2026-11-13; Quit Game returns to the launcher, 2026-11-15).**
 Turn on **Settings > Developer options > Play without closing the app** (unlock Developer options first, see "Developer options" below), then close the app fully and open it again (the flag is read once, at launch, so it does nothing until then). The switch writes the line `inProcessPlay:true` in `Documents/Horizon/launcher.txt`; typing the line by hand works too (true, 1, yes or on, any capitals, stray spaces tolerated).
 Then `main.m` always starts the engine, arms its hold (`horizon_ios_arm_hold`), and the engine opens its window
 and waits. `EngineOverlay.swift` puts the SwiftUI launcher in a window of its own above that one (since 2026-11-11; the first version presented it from winit's controller, and the engine's black boot screen flashed in and out behind it). The cover is raised from a `didFinishLaunching` observer registered before winit's, and while the hold waits the engine's window is portrait (`ios_hold::window_starts_portrait`), switched to landscape on Play. Play writes the signed-in
 account's session file, calls `horizon_ios_play()` (the engine's loader goes on), and dismisses the launcher.
-Quit Game still ends the process (returning to the launcher is the next step). Delete the line to go back to the
+Quit Game goes back to the launcher (built 2026-11-15, not yet tried on a phone): the game and its window are dropped, the launcher comes back, and the next Play loads a fresh game. If the app misbehaves after a Quit, close it fully. Delete the line to go back to the
 relaunch. If the engine's window never appears the launcher is not shown (20 s limit, noted in the breadcrumb);
 the app then switches the flag off itself, so the next open is the normal launcher (or remove the line in the Files app). `openGame:1` and `start-game` are ignored in this mode.
 

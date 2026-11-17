@@ -5,6 +5,8 @@ summary: What the engine change involves, read from our own sources and from the
 
 # Play and Quit Game in one process
 
+**Status 2026-11-15:** steps 1 and 2 are built (see `HORIZON_CHANGES.md` P.4): `App::Idle`, the quit path, the shell's "engine is idle" call, and a shared copy of the loaded resources so each Play does not leak a new one. Not done: the five-cycle phone test (step 3).
+
 Written 2026-11-10 from reading the code. **Nothing here is compiled or run.** Labels: READ (seen in a file), GUESS (not checked).
 
 ## Today (READ)

@@ -179,3 +179,9 @@ layouts), Diagnostics as a tool, Marketplace paging and descriptions, Play witho
 idle-engine and memory changes, and CI checks. Wording rule kept: **phone** only where the owner has used it and reported back,
 **CI** where it is compiled and tested but not yet seen. Still not done and said so: measurements, Quit Game back to the launcher,
 preparing files on the phone, Worlds and Screenshots pages.
+
+## 2026-11-15
+
+- Checked the `horizon-update` branch against the old port: all 63 touched files and every line the port added were accounted for (re-ported into upstream's new structure, or no longer needed), the tests ran (`horizon-client-input` 404 passed), and one lost edit was found and restored (Auto Performance's cap on the server's chunk radius). The baseline file still named the old upstream, so the pristine upstream `2832168` was added as the baseline commit, the index (67 files), section R and the patches were rewritten, and the branch was merged into `main`.
+- Built Quit Game back to the launcher (`App::Idle`, `HORIZON_CHANGES.md` P.4). CI compiled it (and the stack-budget check passed). Not run on a phone.
+- Owner decisions: the test sign-in becomes the real sign-in; touch controls are polished; the launcher's main parts are done.
