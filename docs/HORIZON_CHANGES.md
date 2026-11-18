@@ -9,7 +9,7 @@ what `horizon/` holds now, why each exists, and how to put it back.
 
 - **The baseline is commit `6a824fc`** (the pristine import of upstream Horizon `2832168`, 2026-11), recorded in
   `docs/HORIZON_BASELINE`. Everything below is `git diff 6a824fc HEAD -- horizon`. At the time of writing that is
-  **67 files, +10869 / -132: 19 new files, 48 modified, none deleted.** Only 132 upstream lines are
+  **69 files, +11049 / -135: 20 new files, 49 modified, none deleted.** Only 135 upstream lines are
   removed or rewritten in total; everything else is added. (The first import was `fa80441`, upstream `77af961`;
   see section R for the move.)
 - **The patches are the exact diff** (generated, not hand-written). When this prose and a patch
@@ -36,7 +36,7 @@ could not be built without it) and some of it (the iMC Settings page, Auto Perfo
 goes beyond a touch fix. They are listed here as the facts they are, not as approved. **Each entry
 carries a risk, so you can decide what to keep when you rebase.**
 
-Entries are grouped by what they are for, not by file. Every one of the 67 files appears once, in
+Entries are grouped by what they are for, not by file. Every one of the 69 files appears once, in
 the index at the end.
 
 ---
@@ -567,7 +567,7 @@ tests; the `game/` glue is compiled by CI only.
 **Re-apply:** the `COUNT` constant and the two appended names in `touch_layout.rs`, the `PadKind::Menu`
 variant (a new match arm in `slot`, `label`, `base`), and the `Tap` and `Hold` arms in `touch_apply`.
 
-## F. Index: all 67 files
+## F. Index: all 69 files
 
 `A` = new file, `M` = modified. Section in brackets.
 
@@ -578,6 +578,7 @@ M horizon/crates/horizon-client-input/Cargo.toml                         [A2]
 A horizon/crates/horizon-client-input/src/auto_performance.rs            [E1]
 M horizon/crates/horizon-client-input/src/gamepad.rs                     [M]
 A horizon/crates/horizon-client-input/src/imc_settings.rs                [D1, N]
+A horizon/crates/horizon-client-input/src/frame_probe.rs                  [P]
 A horizon/crates/horizon-client-input/src/ios_hold.rs                    [P]
 M horizon/crates/horizon-client-input/src/keybinds.rs                    [A3]
 M horizon/crates/horizon-client-input/src/lib.rs                         [C2, I2, J2, K2, L2, N, P]
@@ -661,7 +662,7 @@ went:
 
 **The baseline.** The rebuild was committed as one commit on `horizon-update`, so the pristine upstream was added afterwards as its own commit (the
 `HORIZON_BASELINE` id) and joined to the branch with a no-change merge; `tools/horizon_diff.sh` diffs against it. Checked: the baseline's tree is
-upstream `2832168` byte for byte, and `git diff <baseline> HEAD -- horizon` is the 67 files listed in F.
+upstream `2832168` byte for byte, and `git diff <baseline> HEAD -- horizon` is the 69 files listed in F.
 
 ## G. Rebase checklist
 

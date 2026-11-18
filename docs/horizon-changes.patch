@@ -569,6 +569,119 @@ index 0000000..59755b9
 +        assert!(!g.tick(&c, wanted, Some(1), 0.0).any());
 +    }
 +}
+diff --git a/horizon/crates/horizon-client-input/src/frame_probe.rs b/horizon/crates/horizon-client-input/src/frame_probe.rs
+new file mode 100644
+index 0000000..d033f59
+--- /dev/null
++++ b/horizon/crates/horizon-client-input/src/frame_probe.rs
+@@ -0,0 +1,107 @@
++//! iMC (iOS): the engine's frame times, for the app's session log (`platform/ios/App/SessionLog.m`).
++//!
++//! The game calls [`record`] once for each frame it renders, with how long that frame took. The shell
++//! reads and clears the counters every few seconds through the bridge ([`take`]), so the log can say how
++//! many frames the engine drew in that window, how long they took on average, the slowest one, and how
++//! many ran over one 60 Hz and one 30 Hz frame. Five atomic additions per frame, nothing else: no
++//! allocation, no lock, no clock read of its own.
++//!
++//! Nothing here decides anything or changes what the game does; it only counts. Without the iOS shell
++//! nobody calls [`take`] and the counters just keep adding up in place (the totals wrap harmlessly).
++use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
++
++/// A frame longer than this missed a 60 Hz refresh (1/60 s, rounded up to 16.7 ms).
++pub const SLOW_60_NS: u64 = 16_700_000;
++/// A frame longer than this missed a 30 Hz refresh (33.4 ms).
++pub const SLOW_30_NS: u64 = 33_400_000;
++
++static FRAMES: AtomicU64 = AtomicU64::new(0);
++static SUM_NS: AtomicU64 = AtomicU64::new(0);
++static MAX_NS: AtomicU64 = AtomicU64::new(0);
++static OVER_60: AtomicU64 = AtomicU64::new(0);
++static OVER_30: AtomicU64 = AtomicU64::new(0);
++
++/// What the game recorded since the last [`take`].
++#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
++pub struct Window {
++    /// Frames rendered.
++    pub frames: u64,
++    /// The sum of their durations, in nanoseconds (the average is this over `frames`).
++    pub sum_ns: u64,
++    /// The longest one, in nanoseconds.
++    pub max_ns: u64,
++    /// How many were longer than [`SLOW_60_NS`].
++    pub over_60: u64,
++    /// How many were longer than [`SLOW_30_NS`].
++    pub over_30: u64,
++}
++
++/// One rendered frame that took `ns` nanoseconds.
++#[inline]
++pub fn record(ns: u64) {
++    FRAMES.fetch_add(1, Relaxed);
++    SUM_NS.fetch_add(ns, Relaxed);
++    MAX_NS.fetch_max(ns, Relaxed);
++    if ns > SLOW_60_NS {
++        OVER_60.fetch_add(1, Relaxed);
++    }
++    if ns > SLOW_30_NS {
++        OVER_30.fetch_add(1, Relaxed);
++    }
++}
++
++/// Everything recorded since the last call, and the counters back to zero. A frame recorded while
++/// this runs lands in this window or the next, never lost (each counter is swapped on its own, so
++/// the five may differ by that one frame).
++pub fn take() -> Window {
++    Window {
++        frames: FRAMES.swap(0, Relaxed),
++        sum_ns: SUM_NS.swap(0, Relaxed),
++        max_ns: MAX_NS.swap(0, Relaxed),
++        over_60: OVER_60.swap(0, Relaxed),
++        over_30: OVER_30.swap(0, Relaxed),
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use std::sync::Mutex;
++
++    /// The counters are process-wide, so the tests that use them take turns.
++    static SERIAL: Mutex<()> = Mutex::new(());
++
++    #[test]
++    fn a_window_counts_sums_and_finds_the_slowest() {
++        let _turn = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
++        take();
++        for ns in [8_000_000, 16_000_000, 20_000_000, 40_000_000] {
++            record(ns);
++        }
++        let w = take();
++        assert_eq!(w.frames, 4);
++        assert_eq!(w.sum_ns, 84_000_000);
++        assert_eq!(w.max_ns, 40_000_000);
++        assert_eq!(w.over_60, 2, "20 ms and 40 ms missed 60 Hz");
++        assert_eq!(w.over_30, 1, "only 40 ms missed 30 Hz");
++    }
++
++    #[test]
++    fn taking_clears_the_window() {
++        let _turn = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
++        take();
++        record(5_000_000);
++        assert_eq!(take().frames, 1);
++        assert_eq!(take(), Window::default());
++    }
++
++    #[test]
++    fn a_frame_exactly_on_the_limit_is_not_slow() {
++        let _turn = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
++        take();
++        record(SLOW_60_NS);
++        record(SLOW_30_NS);
++        let w = take();
++        assert_eq!((w.over_60, w.over_30), (1, 0));
++    }
++}
 diff --git a/horizon/crates/horizon-client-input/src/gamepad.rs b/horizon/crates/horizon-client-input/src/gamepad.rs
 index 02f755f..ae8af65 100644
 --- a/horizon/crates/horizon-client-input/src/gamepad.rs
@@ -2250,10 +2363,10 @@ index 215d8bb..3395998 100644
          Key::Dead(Some(c)) => learn(name, c.encode_utf8(&mut [0; 4])),
          _ => {}
 diff --git a/horizon/crates/horizon-client-input/src/lib.rs b/horizon/crates/horizon-client-input/src/lib.rs
-index aa14353..69fc432 100644
+index aa14353..0784f7c 100644
 --- a/horizon/crates/horizon-client-input/src/lib.rs
 +++ b/horizon/crates/horizon-client-input/src/lib.rs
-@@ -4,11 +4,14 @@
+@@ -4,11 +4,15 @@
  //! (`horizon_client::keybinds`, ...).
  #![forbid(unsafe_code)]
  pub mod actions;
@@ -2264,11 +2377,12 @@ index aa14353..69fc432 100644
  pub mod held;
 +pub mod imc_settings;
  pub mod input;
++pub mod frame_probe;
 +pub mod ios_hold;
  pub mod input_source;
  pub mod interaction_input;
  pub mod key_names;
-@@ -18,4 +21,10 @@ pub mod modifiers;
+@@ -18,4 +22,10 @@ pub mod modifiers;
  pub mod mouse;
  pub mod radial;
  pub mod snap;
@@ -6913,16 +7027,21 @@ index 472e577..962056f 100644
          } else {
              assert_eq!(
 diff --git a/horizon/crates/horizon-client-render/src/graphics_ui.rs b/horizon/crates/horizon-client-render/src/graphics_ui.rs
-index a6aca0a..ef3d3e0 100644
+index a6aca0a..364358c 100644
 --- a/horizon/crates/horizon-client-render/src/graphics_ui.rs
 +++ b/horizon/crates/horizon-client-render/src/graphics_ui.rs
-@@ -33,15 +33,19 @@ pub enum Page {
+@@ -33,15 +33,24 @@ pub enum Page {
      Advanced,
      /// HDR output's own settings.
      Hdr,
-+    /// The iOS app's own settings (`imc_settings`): touch controls, the cursor and Auto
-+    /// Performance. Last, so the pages before it keep their places.
++    /// The iOS app's own graphics-side settings (`imc_settings`): Auto Performance, the phone
++    /// preset and the settings greying. Last of the listed pages, so the ones before it keep
++    /// their places.
 +    Imc,
++    /// The iOS app's touch settings (`imc_settings`): the on-screen controls, touch alignment
++    /// and the cursor. Not one of this screen's tabs ([`Page::ALL`]): the Controls page opens it
++    /// on its own (`GraphicsScreen::touch_view`, `options_ui::Page::ControlsTouch`).
++    Touch,
  }
  impl Page {
 -    pub const ALL: [Page; 6] = [
@@ -6937,23 +7056,25 @@ index a6aca0a..ef3d3e0 100644
      ];
      pub fn name(self) -> &'static str {
          match self {
-@@ -51,6 +55,7 @@ impl Page {
+@@ -51,6 +60,8 @@ impl Page {
              Page::Shaders => "Shaders",
              Page::Advanced => "Advanced",
              Page::Hdr => "HDR",
 +            Page::Imc => "iMC",
++            Page::Touch => "Touch",
          }
      }
      /// What the page holds, in the strip while no setting is pointed at.
-@@ -62,6 +67,7 @@ impl Page {
+@@ -62,6 +73,8 @@ impl Page {
              Page::Shaders => "Shader packs, Horizon's and shaders/ folder ones, and their options.",
              Page::Advanced => "How frames reach the screen, and the performance overlay.",
              Page::Hdr => "Brighter-than-white output on an HDR display.",
-+            Page::Imc => "The iPhone app's own settings: touch controls, the cursor and Auto Performance.",
++            Page::Imc => "The iPhone app's own settings: Auto Performance, the phone preset and greying what an iPhone doesn't use.",
++            Page::Touch => "The on-screen controls, where touches land, and the cursor.",
          }
      }
  }
-@@ -131,6 +137,46 @@ pub enum Item {
+@@ -131,6 +144,46 @@ pub enum Item {
      Horizon(H),
      /// A Horizon extra that changes the picture (`extras::Item`, kept in `horizon-extras.txt`).
      Extra(crate::extras::Item),
@@ -7000,7 +7121,7 @@ index a6aca0a..ef3d3e0 100644
  }
  
  #[derive(Clone, Copy)]
-@@ -162,6 +208,64 @@ fn e(item: crate::extras::Item, cost: Cost) -> Setting {
+@@ -162,6 +215,64 @@ fn e(item: crate::extras::Item, cost: Cost) -> Setting {
      }
  }
  
@@ -7065,12 +7186,37 @@ index a6aca0a..ef3d3e0 100644
  /// Every page's settings, in named groups of related rows.
  pub fn rows() -> Vec<(Page, Vec<(&'static str, Vec<Setting>)>)> {
      use Cost::*;
-@@ -642,10 +746,75 @@ pub fn rows() -> Vec<(Page, Vec<(&'static str, Vec<Setting>)>)> {
+@@ -642,10 +753,81 @@ pub fn rows() -> Vec<(Page, Vec<(&'static str, Vec<Setting>)>)> {
                  ),
              ],
          ),
 +        (
 +            Page::Imc,
++            {
++                use horizon_client_input::imc_settings::Item as I;
++                vec![
++                    (
++                        "Auto Performance",
++                        vec![
++                            m(I::AutoPerformance, Saves),
++                            m(I::AutoSensitivity, None),
++                            m(I::AutoRenderDistance, Saves),
++                            m(I::AutoMinDistance, None),
++                            m(I::AutoFarTerrain, Saves),
++                            m(I::AutoResolution, Saves),
++                        ],
++                    ),
++                    ("Interface", vec![m(I::GreyUnused, None)]),
++                    (
++                        "Presets",
++                        vec![md(ImcDo::MobilePreset, Saves), md(ImcDo::Reset, None)],
++                    ),
++                ]
++            },
++        ),
++        // The touch settings, which the Controls page opens (`Page::Touch` is not a tab here).
++        (
++            Page::Touch,
 +            {
 +                use horizon_client_input::imc_settings::Item as I;
 +                vec![
@@ -7088,14 +7234,14 @@ index a6aca0a..ef3d3e0 100644
 +                            m(I::MoveZone, None),
 +                            m(I::AutoSprint, None),
 +                            md(ImcDo::EditControls, None),
++                            md(ImcDo::ExtraButtons, None),
 +                        ],
 +                    ),
 +                    (
-+                        "Screen",
++                        "Touch alignment",
 +                        vec![
-+                            m(I::SafeMargin, None),
 +                            m(I::MenuTouch, None),
-+                            m(I::GreyUnused, None),
++                            m(I::SafeMargin, None),
 +                            m(I::ShiftX, None),
 +                            m(I::ShiftY, None),
 +                            m(I::ButtonShiftX, None),
@@ -7112,25 +7258,6 @@ index a6aca0a..ef3d3e0 100644
 +                            m(I::CursorDragGrab, None),
 +                        ],
 +                    ),
-+                    (
-+                        "Auto Performance",
-+                        vec![
-+                            m(I::AutoPerformance, Saves),
-+                            m(I::AutoSensitivity, None),
-+                            m(I::AutoRenderDistance, Saves),
-+                            m(I::AutoMinDistance, None),
-+                            m(I::AutoFarTerrain, Saves),
-+                            m(I::AutoResolution, Saves),
-+                        ],
-+                    ),
-+                    (
-+                        "Presets",
-+                        vec![
-+                            md(ImcDo::MobilePreset, Saves),
-+                            md(ImcDo::ExtraButtons, None),
-+                            md(ImcDo::Reset, None),
-+                        ],
-+                    ),
 +                ]
 +            },
 +        ),
@@ -7142,7 +7269,7 @@ index a6aca0a..ef3d3e0 100644
          for (_, groups) in &mut pages {
              for (_, rows) in groups {
                  rows.retain(|r| {
-@@ -1144,6 +1313,26 @@ impl Item {
+@@ -1144,6 +1326,26 @@ impl Item {
          if !self.available() {
              return Some("This feature is not yet available in Horizon.");
          }
@@ -7169,7 +7296,7 @@ index a6aca0a..ef3d3e0 100644
          match self {
              Item::Horizon(
                  H::HdrCalibrate
-@@ -1195,7 +1384,10 @@ impl Item {
+@@ -1195,7 +1397,10 @@ impl Item {
      fn steps(self, s: &Settings, out: &EffectiveOutput) -> bool {
          self.switch(s, out).is_none()
              && self.slider(s).is_none()
@@ -7181,7 +7308,7 @@ index a6aca0a..ef3d3e0 100644
      }
      /// On/off settings and their value.
      pub fn switch(self, s: &Settings, out: &EffectiveOutput) -> Option<bool> {
-@@ -1228,6 +1420,8 @@ impl Item {
+@@ -1228,6 +1433,8 @@ impl Item {
              }
              Item::Vanilla(Opt::Vsync) => s.vsync,
              Item::Extra(e) => return e.switch(&s.extras),
@@ -7190,7 +7317,7 @@ index a6aca0a..ef3d3e0 100644
              Item::Vanilla(Opt::Fullscreen) => s.fullscreen,
              Item::Vanilla(Opt::ExclusiveFullscreen) => s.file.bool("exclusiveFullscreen"),
              Item::Vanilla(Opt::SmoothLighting) => s.smooth_lighting,
-@@ -1243,7 +1437,7 @@ impl Item {
+@@ -1243,7 +1450,7 @@ impl Item {
          match self {
              Item::Vanilla(o) => o.slider_position(s),
              Item::Horizon(h) => h.slider(s),
@@ -7199,7 +7326,7 @@ index a6aca0a..ef3d3e0 100644
          }
      }
      pub fn label(self, s: &Settings, out: &EffectiveOutput) -> Text {
-@@ -1261,6 +1455,21 @@ impl Item {
+@@ -1261,6 +1468,21 @@ impl Item {
                  Text::literal(e.caption_text()),
                  Text::literal(e.value(&s.extras)),
              ),
@@ -7221,7 +7348,7 @@ index a6aca0a..ef3d3e0 100644
          }
      }
      pub fn set_slider(self, s: &mut Settings, v: f32, out: &EffectiveOutput) {
-@@ -1271,7 +1480,7 @@ impl Item {
+@@ -1271,7 +1493,7 @@ impl Item {
              // Options.applyGraphicsPreset, as Video Settings' slider does it.
              Item::Vanilla(o) => crate::options_ui::set_slider(o, s, v),
              Item::Horizon(h) => h.set_slider(s, v),
@@ -7230,7 +7357,7 @@ index a6aca0a..ef3d3e0 100644
          }
          self.touched(s);
      }
-@@ -1283,6 +1492,8 @@ impl Item {
+@@ -1283,6 +1505,8 @@ impl Item {
              Item::Vanilla(o) => o.cycle(s, back, framebuffer),
              Item::Horizon(h) => h.cycle(s, back, out),
              Item::Extra(e) => e.cycle(&mut s.extras, back),
@@ -7239,7 +7366,7 @@ index a6aca0a..ef3d3e0 100644
          }
          self.touched(s);
      }
-@@ -1291,6 +1502,8 @@ impl Item {
+@@ -1291,6 +1515,8 @@ impl Item {
          let presetless = matches!(
              self,
              Item::Extra(_)
@@ -7248,7 +7375,7 @@ index a6aca0a..ef3d3e0 100644
                  | Item::Horizon(
                      H::Preset
                          | H::BlueMapAutoDetect
-@@ -1332,7 +1545,7 @@ impl Item {
+@@ -1332,7 +1558,7 @@ impl Item {
          match self {
              Item::Vanilla(o) => o.slider_steps(),
              Item::Horizon(h) => h.slider_steps(),
@@ -7257,7 +7384,7 @@ index a6aca0a..ef3d3e0 100644
          }
      }
      pub fn step_slider(self, s: &mut Settings, forward: bool, width: f32, out: &EffectiveOutput) {
-@@ -1361,6 +1574,19 @@ fn parts(item: Item, s: &Settings, out: &EffectiveOutput) -> (String, Option<Str
+@@ -1361,6 +1587,19 @@ fn parts(item: Item, s: &Settings, out: &EffectiveOutput) -> (String, Option<Str
      shell::name_and_value(&item.label(s, out).plain())
  }
  
@@ -7277,7 +7404,42 @@ index a6aca0a..ef3d3e0 100644
  /// A setting's row: its control, what it does (and what its chosen value does), what it costs,
  /// and why it can't be used now.
  fn row(setting: Setting, s: &Settings, out: &EffectiveOutput) -> Row<Item> {
-@@ -1506,6 +1732,24 @@ impl Screen for GraphicsScreen {
+@@ -1449,6 +1688,10 @@ pub struct GraphicsScreen {
+     /// The output of the renderer the settings are drawn for (`OptionsUi::draw`), handed in
+     /// each time the screen is reached.
+     pub(crate) output: EffectiveOutput,
++    /// iMC: the screen is open as the Controls page's touch settings (`Page::Touch` alone), not as
++    /// Horizon's graphics settings (every page but that one). The options screen sets it each
++    /// time it opens either.
++    pub(crate) touch_view: bool,
+ }
+ 
+ impl Screen for GraphicsScreen {
+@@ -1466,7 +1709,7 @@ impl Screen for GraphicsScreen {
+             g::gpu_culling_offer(),
+             g::reduced_far_detail_suggested(),
+         );
+-        shell::stamp_of(&(read(s), s.fullbright_held, offers))
++        shell::stamp_of(&(read(s), s.fullbright_held, offers, self.touch_view))
+     }
+     fn sheets(&self, s: &Settings) -> Vec<Sheet<Page, Item>> {
+         let sheet = |(page, groups): (Page, Vec<(&'static str, Vec<Setting>)>)| Sheet {
+@@ -1487,7 +1730,13 @@ impl Screen for GraphicsScreen {
+             listed: true,
+             heading: None,
+         };
+-        rows().into_iter().map(sheet).collect()
++        // One screen, two ways in: the touch page alone (Controls > Touch controls), or every
++        // other page (Video Settings), so neither one's search finds the other's rows.
++        rows()
++            .into_iter()
++            .filter(|(page, _)| (*page == Page::Touch) == self.touch_view)
++            .map(sheet)
++            .collect()
+     }
+     fn press(&mut self, s: &mut Settings, item: Item, back: bool) -> Vec<Output> {
+         match item {
+@@ -1506,6 +1755,24 @@ impl Screen for GraphicsScreen {
                      Output::Push(OptionsPage::ShaderPacks),
                  ]
              }
@@ -7302,7 +7464,7 @@ index a6aca0a..ef3d3e0 100644
              _ => {
                  item.cycle(s, back, self.framebuffer, &self.output);
                  vec![Output::Event(Event::Changed)]
-@@ -1735,7 +1979,7 @@ mod tests {
+@@ -1735,7 +2002,7 @@ mod tests {
              false,
              false,
          );
@@ -7311,7 +7473,7 @@ index a6aca0a..ef3d3e0 100644
      }
  
      #[test]
-@@ -1772,7 +2016,8 @@ mod tests {
+@@ -1772,7 +2039,8 @@ mod tests {
          ui.set_search("horizon preset");
          assert_eq!(ui.listed(&s, SIZE), [general(Item::Horizon(H::Preset))]);
          ui.set_search("hdr");
@@ -7321,7 +7483,7 @@ index a6aca0a..ef3d3e0 100644
          press(&mut ui, &mut s, (x + w / 2.0, y + h / 2.0));
          assert_eq!(ui.current_page(&s, SIZE), Some(Page::Hdr));
          let [x, y, ..] = cols.clear();
-@@ -1987,7 +2232,7 @@ mod tests {
+@@ -1987,7 +2255,7 @@ mod tests {
          // Up from Done: the page list's last page.
          ui.set_focus(Some(Target::Done));
          key(&mut ui, &mut s, K::ArrowUp);
@@ -7330,7 +7492,15 @@ index a6aca0a..ef3d3e0 100644
          // Its row wheeled far out of view: Down takes the first row in view, as it is.
          focus_on(&mut ui, Item::Horizon(H::Preset));
          ui.scroll(&s, SIZE, -1000.0);
-@@ -2514,7 +2759,7 @@ mod tests {
+@@ -2094,6 +2362,7 @@ mod tests {
+         let mut screen = GraphicsScreen {
+             framebuffer: FB,
+             output: NONE,
++            touch_view: false,
+         };
+         let default = Settings::default();
+         for (_, item) in items() {
+@@ -2514,7 +2783,7 @@ mod tests {
              .into_iter()
              .find(|(_, i)| *i == item)
              .map(|(p, _)| p);
@@ -7339,7 +7509,7 @@ index a6aca0a..ef3d3e0 100644
              // Metal draws flat: never offered, so not shown.
              assert_eq!(page, None);
              return;
-@@ -2560,7 +2805,7 @@ mod tests {
+@@ -2560,7 +2829,7 @@ mod tests {
          use crate::graphics::GpuCullingOffer;
          let item = Item::Horizon(H::GpuCulling);
          let at = |item| items().into_iter().position(|(_, i)| i == item);
@@ -7348,9 +7518,21 @@ index a6aca0a..ef3d3e0 100644
              // Metal draws no count the GPU wrote: never offered, so not shown.
              assert_eq!(at(item), None);
              return;
+diff --git a/horizon/crates/horizon-client-render/src/graphics_ui_hdr_tests.rs b/horizon/crates/horizon-client-render/src/graphics_ui_hdr_tests.rs
+index 3952a49..aca526e 100644
+--- a/horizon/crates/horizon-client-render/src/graphics_ui_hdr_tests.rs
++++ b/horizon/crates/horizon-client-render/src/graphics_ui_hdr_tests.rs
+@@ -326,6 +326,7 @@ fn undo_never_restores_a_held_hdr_start() {
+     let mut screen = GraphicsScreen {
+         framebuffer: FB,
+         output: NONE,
++        touch_view: false,
+     };
+     let mut opened = Settings::default();
+     opened.horizon.hdr = HdrMode::Auto;
 diff --git a/horizon/crates/horizon-client-render/src/ios_unused.rs b/horizon/crates/horizon-client-render/src/ios_unused.rs
 new file mode 100644
-index 0000000..5410c83
+index 0000000..8223117
 --- /dev/null
 +++ b/horizon/crates/horizon-client-render/src/ios_unused.rs
 @@ -0,0 +1,271 @@
@@ -7598,7 +7780,7 @@ index 0000000..5410c83
 +        // (`IOS_FEASIBILITY_REPORT.md` section 12), so they are not greyed on a guess.
 +        Mods | ModBrowser | ModProject | ShaderPacks | ShaderOptions | Studio | Agent | Main
 +        | Video | Sound | Controls | Chat | Accessibility | Language | Font | Packs | Graphics
-+        | GraphicsAdvanced | GraphicsImc | Controller | PadBinds | Extras | Pvp | Credits | Horizon
++        | GraphicsAdvanced | GraphicsImc | ControlsTouch | Controller | PadBinds | Extras | Pvp | Credits | Horizon
 +        | TouchButtons | Added(_) | PackOptions | ControllerRadial | ControllerRadialName
 +        | ControllerRadialPick | Skin | Online | Music => None,
 +    }
@@ -7912,19 +8094,23 @@ index 0000000..ba273a4
 +    }
 +}
 diff --git a/horizon/crates/horizon-client-render/src/options_ui.rs b/horizon/crates/horizon-client-render/src/options_ui.rs
-index 1a8f14d..17d0827 100644
+index 1a8f14d..eb7951c 100644
 --- a/horizon/crates/horizon-client-render/src/options_ui.rs
 +++ b/horizon/crates/horizon-client-render/src/options_ui.rs
-@@ -1262,6 +1262,8 @@ pub enum Page {
+@@ -1262,6 +1262,12 @@ pub enum Page {
      Graphics,
      GraphicsAdvanced,
      GraphicsHdr,
-+    /// The graphics screen at its iMC page: the iOS app's own settings (`imc_settings`).
++    /// The graphics screen at its iMC page: the iOS app's own graphics-side settings (`imc_settings`):
++    /// Auto Performance, the phone preset and the settings greying.
 +    GraphicsImc,
++    /// Controls > Touch Controls: the iOS app's touch settings (`imc_settings`), the same settings
++    /// screen as the graphics one opened on its Touch page alone (`GraphicsScreen::touch_view`).
++    ControlsTouch,
      /// HDR calibration, full screen (`calibration`).
      HdrCalibration,
      /// Horizon's controller settings and button binds.
-@@ -1280,6 +1282,8 @@ pub enum Page {
+@@ -1280,6 +1286,8 @@ pub enum Page {
      /// Horizon Settings: every page Horizon adds, as a mod's settings
      /// screen hangs off vanilla's Options.
      Horizon,
@@ -7933,7 +8119,7 @@ index 1a8f14d..17d0827 100644
      /// Replay Studio: saved recordings browser and 3D video editor launcher.
      Studio,
      /// AI Agent: agent control on or off, whether an agent is connected, the connection details.
-@@ -1311,6 +1315,10 @@ pub(crate) enum Act {
+@@ -1311,6 +1319,10 @@ pub(crate) enum Act {
      PvpPreset,
      /// PvP & HUD's Edit HUD button.
      HudEditor,
@@ -7944,7 +8130,7 @@ index 1a8f14d..17d0827 100644
      /// The installed native mod's settings page.
      ModSettings(usize),
      /// A native mod's key (mod, key) waits for a key; a button of its page.
-@@ -1480,6 +1488,10 @@ pub enum Event {
+@@ -1480,6 +1492,10 @@ pub enum Event {
      Credits,
      /// PvP & HUD's Edit HUD: open the HUD editor over the game.
      HudEditor,
@@ -7955,7 +8141,7 @@ index 1a8f14d..17d0827 100644
      /// Copy how an agent connects (the AI Agent page).
      CopyAgentDetails,
      /// The AI Agent page's recording button: start or stop.
-@@ -1607,6 +1619,8 @@ pub struct OptionsUi {
+@@ -1607,6 +1623,8 @@ pub struct OptionsUi {
      pub studio: crate::studio_ui::StudioUi,
      /// The AI Agent page's status lines (set by the game while it shows).
      pub agent_status: Vec<String>,
@@ -7964,7 +8150,7 @@ index 1a8f14d..17d0827 100644
      /// A repro recording is running: the AI Agent page's button says stop.
      pub agent_recording: bool,
      /// The Music page's groups (set by the game when it opens the page).
-@@ -1687,6 +1701,7 @@ impl Default for OptionsUi {
+@@ -1687,6 +1705,7 @@ impl Default for OptionsUi {
              split_setup: Default::default(),
              studio: Default::default(),
              agent_status: Vec::new(),
@@ -7972,7 +8158,7 @@ index 1a8f14d..17d0827 100644
              agent_recording: false,
              music_groups: Vec::new(),
              focus: None,
-@@ -1700,6 +1715,42 @@ impl Default for OptionsUi {
+@@ -1700,6 +1719,42 @@ impl Default for OptionsUi {
          }
      }
  }
@@ -8015,7 +8201,7 @@ index 1a8f14d..17d0827 100644
  fn option_widget(s: &Settings, opt: Opt, x: f32, y: f32, w: f32) -> Widget {
      // OptionsSubScreen.addContents: the narrator button is active only while
      // the narrator is (`narratorButton.active = narrator.isActive()`).
-@@ -1774,6 +1825,10 @@ enum Row {
+@@ -1774,6 +1829,10 @@ enum Row {
  /// A widget's tooltip (`setTooltip`), unwrapped: drawn while hovered, and
  /// its narration's hint.
  fn tooltip_text(s: &Settings, wd: &Widget) -> Option<Text> {
@@ -8026,7 +8212,7 @@ index 1a8f14d..17d0827 100644
      let WKind::Button { act, .. } = &wd.kind else {
          let WKind::Slider { opt, .. } = &wd.kind else {
              return None;
-@@ -1799,6 +1854,8 @@ fn tooltip_text(s: &Settings, wd: &Widget) -> Option<Text> {
+@@ -1799,6 +1858,8 @@ fn tooltip_text(s: &Settings, wd: &Widget) -> Option<Text> {
          Act::Push(Page::Accessibility) => Some("options.accessibility.tooltip".into()),
          Act::PvpPreset => Some("horizon.pvp.preset.tooltip".into()),
          Act::HudEditor => Some("horizon.pvp.editor.tooltip".into()),
@@ -8035,15 +8221,35 @@ index 1a8f14d..17d0827 100644
          _ => None,
      };
      if let Some(key) = key.filter(|key| lang::has(key)) {
-@@ -2134,6 +2191,7 @@ impl OptionsUi {
+@@ -2103,6 +2164,8 @@ impl OptionsUi {
+             self.shader.show(at);
+         }
+         if let Some(at) = Self::graphics_page(page) {
++            // One screen, two ways in: the Controls page's touch settings, or Video Settings.
++            self.graphics.screen.touch_view = page == Page::ControlsTouch;
+             self.graphics.show(at);
+         }
+         if let Some(at) = Self::controller_page(page) {
+@@ -2126,7 +2189,8 @@ impl OptionsUi {
+     /// Whether a video settings screen is open, Horizon's or vanilla's: the fullscreen mode
+     /// waits for it to close, and Ctrl with the wheel steps the GUI scale.
+     pub fn video_open(&self) -> bool {
+-        self.page() == Page::Video || Self::graphics_page(self.page()).is_some()
++        self.page() == Page::Video
++            || (self.page() != Page::ControlsTouch && Self::graphics_page(self.page()).is_some())
+     }
+     /// Where the graphics screen opens for `page`, if it is one of its pages.
+     fn graphics_page(page: Page) -> Option<crate::graphics_ui::Page> {
+@@ -2134,6 +2198,8 @@ impl OptionsUi {
              Page::Graphics => Some(crate::graphics_ui::Page::General),
              Page::GraphicsAdvanced => Some(crate::graphics_ui::Page::Advanced),
              Page::GraphicsHdr => Some(crate::graphics_ui::Page::Hdr),
 +            Page::GraphicsImc => Some(crate::graphics_ui::Page::Imc),
++            Page::ControlsTouch => Some(crate::graphics_ui::Page::Touch),
              _ => None,
          }
      }
-@@ -2160,15 +2218,18 @@ impl OptionsUi {
+@@ -2160,15 +2226,19 @@ impl OptionsUi {
              Page::ShaderPacks => "horizon.pages.shader_packs",
              Page::ShaderOptions => "horizon.pages.shader_options",
              Page::PackOptions => "horizon.pack.options.title",
@@ -8055,6 +8261,7 @@ index 1a8f14d..17d0827 100644
 +            | Page::GraphicsHdr
 +            | Page::GraphicsImc
 +            | Page::HdrCalibration => "options.videoTitle",
++            Page::ControlsTouch => "controls.title",
              Page::Controller | Page::PadBinds => "horizon.pages.controller",
              Page::ControllerRadial => "horizon.pages.controller_radial",
              Page::ControllerRadialName => "horizon.radial.name_title",
@@ -8065,7 +8272,7 @@ index 1a8f14d..17d0827 100644
              Page::Credits => "credits_and_attribution.screen.title",
              Page::Horizon => "horizon.pages.settings",
              Page::Studio => "horizon.pages.studio",
-@@ -2441,6 +2502,41 @@ impl OptionsUi {
+@@ -2441,6 +2511,41 @@ impl OptionsUi {
                  rows
              }
              Page::Horizon => self.horizon_rows(s),
@@ -8107,7 +8314,25 @@ index 1a8f14d..17d0827 100644
              Page::Agent => {
                  let mut rows = vec![Row::Buttons(
                      self.extra_button(s, crate::extras::Item::AgentControl),
-@@ -3254,6 +3350,10 @@ impl OptionsUi {
+@@ -2628,6 +2733,17 @@ impl OptionsUi {
+                     ),
+                     None,
+                 ));
++                // iMC: the touch settings, which lived on the graphics screen's iMC page.
++                rows.push(Row::Buttons(
++                    button(
++                        0.0,
++                        0.0,
++                        310.0,
++                        tr("horizon.pages.open.touch"),
++                        Act::Push(Page::ControlsTouch),
++                    ),
++                    None,
++                ));
+                 self.filter_option_rows(rows)
+             }
+             Page::Mouse => pairs(MOUSE_OPTIONS),
+@@ -3254,6 +3370,10 @@ impl OptionsUi {
              {
                  *active = self.in_world && self.minecart_improvements;
              }
@@ -8118,7 +8343,7 @@ index 1a8f14d..17d0827 100644
          }
          self.row_bands = rows
              .bands
-@@ -3949,6 +4049,14 @@ impl OptionsUi {
+@@ -3949,6 +4069,14 @@ impl OptionsUi {
                                  events.push(Event::Changed);
                              }
                          }
@@ -8133,7 +8358,7 @@ index 1a8f14d..17d0827 100644
                          Act::PlayMusicTrack(event, track) => {
                              events.push(Event::PlayMusicTrack(event, track));
                          }
-@@ -4829,6 +4937,14 @@ impl OptionsUi {
+@@ -4829,6 +4957,14 @@ impl OptionsUi {
                                  events.push(Event::Changed);
                              }
                          }
@@ -8148,7 +8373,7 @@ index 1a8f14d..17d0827 100644
                          Act::PlayMusicTrack(event, track) => {
                              events.push(Event::PlayMusicTrack(event, track));
                          }
-@@ -7340,6 +7456,8 @@ mod tests {
+@@ -7340,6 +7476,8 @@ mod tests {
                      Item::Vanilla(o) => format!("{o:?}"),
                      Item::Horizon(h) => format!("graphics:{h:?}"),
                      Item::Extra(e) => format!("extra:{e:?}"),
@@ -8157,7 +8382,7 @@ index 1a8f14d..17d0827 100644
                  };
                  graphics_rows.insert(id.clone());
                  put(id, "Graphics");
-@@ -7363,6 +7481,8 @@ mod tests {
+@@ -7363,6 +7501,8 @@ mod tests {
                          Act::Cycle(opt) => format!("{opt:?}"),
                          Act::Extra(e) => format!("extra:{e:?}"),
                          Act::PvpPreset => "pvp-preset".to_owned(),
@@ -8166,7 +8391,7 @@ index 1a8f14d..17d0827 100644
                          Act::Push(to) => {
                              ways_in
                                  .entry(format!("{to:?}"))
-@@ -7428,8 +7548,8 @@ mod tests {
+@@ -7428,8 +7568,8 @@ mod tests {
                      Opt::GraphicsBackend => "graphics-api".to_owned(),
                      o => format!("{o:?}"),
                  };
@@ -8177,7 +8402,7 @@ index 1a8f14d..17d0827 100644
                      continue;
                  }
                  assert!(
-@@ -7506,6 +7626,46 @@ mod tests {
+@@ -7506,6 +7646,46 @@ mod tests {
          assert!(pushes(&mut ui).contains(&Page::Controller));
      }
  
@@ -8225,14 +8450,15 @@ index 1a8f14d..17d0827 100644
      fn sound_device_button_in_sound_page_and_cycles() {
          let mut s = Settings::default();
 diff --git a/horizon/crates/horizon-client-render/src/options_ui_pages.rs b/horizon/crates/horizon-client-render/src/options_ui_pages.rs
-index 864dad1..e0578d3 100644
+index 864dad1..5f9e2bf 100644
 --- a/horizon/crates/horizon-client-render/src/options_ui_pages.rs
 +++ b/horizon/crates/horizon-client-render/src/options_ui_pages.rs
-@@ -81,6 +81,7 @@ pub(super) fn horizon_page_tooltip(page: Page) -> Option<&'static str> {
+@@ -81,6 +81,8 @@ pub(super) fn horizon_page_tooltip(page: Page) -> Option<&'static str> {
          Page::Controller => "horizon.pages.controller.tooltip",
          Page::Extras => "horizon.pages.extras.tooltip",
          Page::Pvp => "horizon.pages.pvp.tooltip",
 +        Page::TouchButtons => "horizon.pages.touch_buttons.tooltip",
++        Page::ControlsTouch => "horizon.pages.touch.tooltip",
          Page::Agent => "horizon.pages.agent.tooltip",
          Page::SplitProfiles => "horizon.pages.split_profiles.tooltip",
          Page::ShaderPacks => "horizon.pages.shader_packs.tooltip",
@@ -8388,10 +8614,19 @@ index bdd7292..852764c 100644
              self.mods.save(&crate::logging::shared_dir(dir));
          }
 diff --git a/horizon/crates/horizon-client/assets/horizon/lang/en_us.json b/horizon/crates/horizon-client/assets/horizon/lang/en_us.json
-index 3e7595e..e0bea3c 100644
+index 3e7595e..3b6daaf 100644
 --- a/horizon/crates/horizon-client/assets/horizon/lang/en_us.json
 +++ b/horizon/crates/horizon-client/assets/horizon/lang/en_us.json
-@@ -871,6 +871,98 @@
+@@ -275,6 +275,8 @@
+   "horizon.pages.open.graphics_advanced": "Advanced Graphics...",
+   "horizon.pages.open.shader_packs": "Shader Packs...",
+   "horizon.pages.open.controller": "Controller Settings...",
++  "horizon.pages.open.touch": "Touch Controls...",
++  "horizon.pages.touch.tooltip": "The iPhone app's touch settings: the on-screen controls and their style, where touches land, and the cursor.",
+   "horizon.pages.open.split_setup": "Splitscreen...",
+   "horizon.pages.open.extras": "Extras...",
+   "horizon.pages.open.mods": "Mods...",
+@@ -871,6 +873,98 @@
    "horizon.pages.pvp": "PvP & HUD",
    "horizon.pages.pvp.tooltip": "Crosshair, HUD and PvP settings, all off by default. Nothing here shows what vanilla doesn't.",
    "horizon.pages.open.pvp": "PvP & HUD...",
@@ -8490,7 +8725,7 @@ index 3e7595e..e0bea3c 100644
    "horizon.pvp.header.crosshair": "Crosshair",
    "horizon.pvp.crosshair": "Custom crosshair",
    "horizon.pvp.crosshair_shape": "Shape",
-@@ -1140,6 +1232,16 @@
+@@ -1140,6 +1234,16 @@
    "horizon.recipe_transfer.no_room": "Inventory full",
    "horizon.recipe_transfer.unavailable": "Recipe does not fit this menu",
    "horizon.recipe_transfer.unsupported": "Server requires a known recipe",
@@ -8508,10 +8743,15 @@ index 3e7595e..e0bea3c 100644
    "horizon.debug.pass_detail.inside_passes": "timestamps inside passes",
    "horizon.debug.pass_detail.separate_passes": "separate passes, adds GPU time",
 diff --git a/horizon/crates/horizon-client/src/client_lib.rs b/horizon/crates/horizon-client/src/client_lib.rs
-index cbe92a1..845e5be 100644
+index cbe92a1..2fe8949 100644
 --- a/horizon/crates/horizon-client/src/client_lib.rs
 +++ b/horizon/crates/horizon-client/src/client_lib.rs
-@@ -179,6 +179,7 @@ pub use horizon_client_input::held;
+@@ -175,10 +175,12 @@ pub use horizon_client_input::actions;
+ pub use horizon_client_input::clipboard;
+ pub use horizon_client_input::gamepad;
+ pub use horizon_client_input::gameplay_guide;
++pub use horizon_client_input::frame_probe;
+ pub use horizon_client_input::held;
  pub use horizon_client_input::input;
  pub use horizon_client_input::input_source;
  pub use horizon_client_input::interaction_input;
@@ -8520,7 +8760,7 @@ index cbe92a1..845e5be 100644
  pub use horizon_client_input::keybinds;
  pub use horizon_client_input::keymapping;
 diff --git a/horizon/crates/horizon-client/src/game.rs b/horizon/crates/horizon-client/src/game.rs
-index 2004a92..a8bfbc9 100644
+index 2004a92..c740af2 100644
 --- a/horizon/crates/horizon-client/src/game.rs
 +++ b/horizon/crates/horizon-client/src/game.rs
 @@ -184,6 +184,9 @@ mod hand;
@@ -8688,7 +8928,16 @@ index 2004a92..a8bfbc9 100644
                          server.set_legacy_rules(self.pvp_legacy_rules());
                      }
                      self.clock.end_frame(self.pause);
-@@ -11323,6 +11375,24 @@ impl<'a> Game<'a> {
+@@ -11228,6 +11280,8 @@ impl Game<'_> {
+                             self.record_frame_allocs();
+                         }
+                         self.debug_charts.frame_times.log(elapsed.as_nanos() as i64);
++                        // iMC: the iOS app's session log counts frames and their times (`frame_probe`).
++                        horizon_client_input::frame_probe::record(elapsed.as_nanos() as u64);
+                         if self.frames == 0 {
+                             // The launcher times Play to this line (launcher/src/perf.rs).
+                             log::info!(
+@@ -11323,6 +11377,24 @@ impl<'a> Game<'a> {
          audio: Audio,
          prepared: Option<GameCpuResources>,
      ) -> Result<Self> {
@@ -8713,7 +8962,7 @@ index 2004a92..a8bfbc9 100644
          let root = options.resources.clone();
          let registry = pack.assets.registry;
          // Until a world is opened the streamer is idle.
-@@ -11358,7 +11428,7 @@ impl<'a> Game<'a> {
+@@ -11358,7 +11430,7 @@ impl<'a> Game<'a> {
              &gui.atlas.sprites,
              &gui.atlas.translucent,
          );
@@ -8722,7 +8971,7 @@ index 2004a92..a8bfbc9 100644
              world_biomes: None,
              world_biomes_base: None,
              res: res.clone(),
-@@ -11456,6 +11526,8 @@ impl<'a> Game<'a> {
+@@ -11456,6 +11528,8 @@ impl<'a> Game<'a> {
              unclaimed_window: false,
              focus_after_run: None,
              ime_allowed: false,
@@ -8731,7 +8980,7 @@ index 2004a92..a8bfbc9 100644
              ime_area: None,
              focus_lost: None,
              modifiers: winit::keyboard::ModifiersState::empty(),
-@@ -11590,6 +11662,10 @@ impl<'a> Game<'a> {
+@@ -11590,6 +11664,10 @@ impl<'a> Game<'a> {
              autosaving: false,
              // `computeNextAutosaveInterval` at the clock's 20 ticks a second.
              ticks_until_autosave: 6000,
@@ -8742,7 +8991,7 @@ index 2004a92..a8bfbc9 100644
              applied_modifiers: Vec::new(),
              experience: Experience::default(),
              orbs: Default::default(),
-@@ -11917,7 +11993,7 @@ impl<'a> Game<'a> {
+@@ -11917,7 +11995,7 @@ impl<'a> Game<'a> {
              camera_type: Default::default(),
              fangs: Default::default(),
              player_model: None,
@@ -8751,7 +9000,7 @@ index 2004a92..a8bfbc9 100644
          if game.native_window() {
              game.native_client_start();
          }
-@@ -12272,7 +12348,12 @@ pub fn run_with() -> Result<()> {
+@@ -12272,7 +12350,12 @@ pub fn run_with() -> Result<()> {
      horizon_world::datafix::set_resources(
          &std::path::absolute(&vanilla_root).unwrap_or_else(|_| vanilla_root.clone()),
      );
@@ -8765,7 +9014,7 @@ index 2004a92..a8bfbc9 100644
          // The game build started by hand (the release's zip), not by the
          // launcher: a window says where to get it. Scripts and servers get
          // the error.
-@@ -12326,6 +12407,21 @@ pub fn run_with() -> Result<()> {
+@@ -12326,6 +12409,21 @@ pub fn run_with() -> Result<()> {
      if !synchronous_startup(&options) {
          return run_loading(options, early_settings, vanilla_root, None, started);
      }
@@ -8787,7 +9036,7 @@ index 2004a92..a8bfbc9 100644
      let (root, pack_error) =
          startup_menu::startup_resource_root(&vanilla_root, &early_settings, &options.dev_mods);
      options.resources = root;
-@@ -12374,7 +12470,7 @@ pub fn run_with() -> Result<()> {
+@@ -12374,7 +12472,7 @@ pub fn run_with() -> Result<()> {
              );
              game.settings.save(&Game::options_path());
          }
@@ -8952,18 +9201,19 @@ index 016ef90..929b790 100644
      pub(super) fn chat_key_code(&mut self, key: KeyCode, typed_text: Option<&str>) {
          // The live modifiers, not `self.keys`: every ModifiersChanged runs
 diff --git a/horizon/crates/horizon-client/src/game/control.rs b/horizon/crates/horizon-client/src/game/control.rs
-index 1e316ad..54ac76e 100644
+index 1e316ad..71c1ee3 100644
 --- a/horizon/crates/horizon-client/src/game/control.rs
 +++ b/horizon/crates/horizon-client/src/game/control.rs
-@@ -1191,6 +1191,7 @@ impl Game<'_> {
+@@ -1191,6 +1191,8 @@ impl Game<'_> {
                      "graphics" => Page::Graphics,
                      "graphics-advanced" => Page::GraphicsAdvanced,
                      "graphics-hdr" => Page::GraphicsHdr,
 +                    "graphics-imc" => Page::GraphicsImc,
++                    "controls-touch" => Page::ControlsTouch,
                      "extras" => Page::Extras,
                      "pvp" => Page::Pvp,
                      "credits" => Page::Credits,
-@@ -1458,6 +1459,7 @@ impl Game<'_> {
+@@ -1458,6 +1460,7 @@ impl Game<'_> {
              Screen::DebugOptions => "debug-options",
              Screen::Mod => "mod",
              Screen::HudEditor => "hud-editor",
@@ -11652,7 +11902,7 @@ index 0000000..cc676ea
 +}
 diff --git a/horizon/crates/horizon-client/src/game/touch_editor.rs b/horizon/crates/horizon-client/src/game/touch_editor.rs
 new file mode 100644
-index 0000000..01a9cad
+index 0000000..ad70365
 --- /dev/null
 +++ b/horizon/crates/horizon-client/src/game/touch_editor.rs
 @@ -0,0 +1,522 @@
@@ -11754,7 +12004,7 @@ index 0000000..01a9cad
 +        }
 +        self.settings.save(&Self::options_path());
 +        if editor.from_options {
-+            self.open_options_at(false, horizon_client::options_ui::Page::GraphicsImc);
++            self.open_options_at(false, horizon_client::options_ui::Page::ControlsTouch);
 +        } else {
 +            self.screen = Screen::Playing;
 +            self.capture(true);
@@ -12511,10 +12761,10 @@ index 0000000..e43a317
 +workspace = true
 diff --git a/horizon/platform/ios-bridge/src/lib.rs b/horizon/platform/ios-bridge/src/lib.rs
 new file mode 100644
-index 0000000..12fc581
+index 0000000..3e71f61
 --- /dev/null
 +++ b/horizon/platform/ios-bridge/src/lib.rs
-@@ -0,0 +1,99 @@
+@@ -0,0 +1,116 @@
 +//! The iOS app's way into Horizon.
 +//!
 +//! winit's `EventLoop::run_app` calls `UIApplicationMain` itself on iOS, so the Xcode project
@@ -12580,6 +12830,23 @@ index 0000000..12fc581
 +        State::Released => 2,
 +        State::Cancelled => 3,
 +    }
++}
++
++/// The shell's session log reads the engine's frame times since its last call: five `u64` written to `out`, in this
++/// order: frames rendered, the sum of their durations in nanoseconds, the longest one in nanoseconds, how many ran
++/// over 16.7 ms and how many over 33.4 ms (`horizon_client_input::frame_probe`). The counters start again from zero.
++/// Does nothing when `out` is null. Safe to call from any thread, at any time (before the engine starts it reads zeros).
++///
++/// # Safety
++/// `out` must be null or point to room for five `u64`.
++#[unsafe(no_mangle)]
++pub unsafe extern "C" fn horizon_ios_take_frame_window(out: *mut u64) {
++    if out.is_null() {
++        return;
++    }
++    let w = horizon_client::frame_probe::take();
++    // SAFETY: the caller promised room for five u64.
++    unsafe { out.copy_from_nonoverlapping([w.frames, w.sum_ns, w.max_ns, w.over_60, w.over_30].as_ptr(), 5) };
 +}
 +
 +/// The shell allows Quit Game to go back to the launcher instead of ending the process. Call it with
