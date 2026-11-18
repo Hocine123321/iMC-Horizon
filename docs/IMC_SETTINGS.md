@@ -11,6 +11,15 @@ to the touch controls, were written without a full engine build and are checked 
 
 ## What it is
 
+**Split 2026-11-17.** The settings are now on two screens, by what they do. **Options > Video Settings > iMC** (after HDR, beside Shaders and
+Performance) holds the graphics side: *Auto Performance* (its switch, sensitivity, the three things it may lower, the minimum distance), *Grey out
+unused settings* (under Interface) and the *Phone preset* and *Reset iMC settings* presses (under Presets). **Options > Controls > Touch Controls...**
+holds the touch side, in three groups: *Touch controls* (on-screen buttons, world controls, air hold and its delay, double tap to jump, look speed, hold
+to mine, stick size, steering area, auto sprint, and the *Edit touch controls* and *Extra buttons* presses), *Touch alignment* (menu touch tolerance,
+the safe margin, the touch and button shifts, and the *Calibrate touch* press) and *Cursor*. It is the same settings screen (search, cost dots, hover
+descriptions, Undo) opened on its Touch page alone. Where a section below says the page is in Video Settings, a touch setting is now on the Controls
+side.
+
 A page inside the game, under **Options > Video Settings > iMC** (after HDR, beside Shaders and
 Performance), for settings that belong to the iOS app and not to Minecraft. It is a page of the Video
 Settings screen (`graphics_ui.rs`), so it has that screen's search, the cost dot and the description
@@ -192,7 +201,7 @@ work.
 
 ## Not done
 
-- The page is reachable from the game's Options only (Options > Video Settings > iMC). Opening it from the launcher's Home screen is
+- The pages are reachable from the game's Options only (Options > Video Settings > iMC, and Options > Controls > Touch Controls...). Opening it from the launcher's Home screen is
   not built.
 - The settings do not yet include the graphics API, render distance preset or "keep screen on"
   that `LAUNCHER.md` lists. Those need the engine to read a launcher-written file at start.

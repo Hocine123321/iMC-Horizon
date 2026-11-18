@@ -82,6 +82,7 @@ pub(super) fn horizon_page_tooltip(page: Page) -> Option<&'static str> {
         Page::Extras => "horizon.pages.extras.tooltip",
         Page::Pvp => "horizon.pages.pvp.tooltip",
         Page::TouchButtons => "horizon.pages.touch_buttons.tooltip",
+        Page::ControlsTouch => "horizon.pages.touch.tooltip",
         Page::Agent => "horizon.pages.agent.tooltip",
         Page::SplitProfiles => "horizon.pages.split_profiles.tooltip",
         Page::ShaderPacks => "horizon.pages.shader_packs.tooltip",

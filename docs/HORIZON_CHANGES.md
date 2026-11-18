@@ -503,6 +503,47 @@ app (the packs are loaded separately); after importing or deleting game files, c
 | `horizon/crates/horizon-client/src/game.rs` | Imports `loading_app`. |
 | `horizon/platform/ios-bridge/src/lib.rs` | `horizon_ios_allow_quit`; registers the idle notifier that calls the shell's `horizon_ios_engine_idle`. |
 
+### P.5 The iMC settings split: graphics side in Video Settings, touch side in Controls (2026-11-17)
+
+The one iMC page of Video Settings is now two screens by what the settings do (`IMC_SETTINGS.md` lists which setting is where). **Video Settings > iMC**
+(`graphics_ui::Page::Imc`) keeps Auto Performance, *Grey out unused settings* (group Interface) and the *Phone preset* and *Reset iMC settings*
+presses. **Options > Controls > Touch Controls...** (new `options_ui::Page::ControlsTouch`, a button after *Controller Settings...* on the Controls page)
+holds the touch controls, touch alignment (menu tolerance, safe margin, shifts, *Calibrate touch*) and the cursor, with the *Edit touch controls* and
+*Extra buttons* presses.
+
+How, so it can be re-applied: the touch rows are a new `graphics_ui::Page::Touch` in `rows()`, **not** in `Page::ALL` (so it is no tab of Video
+Settings). The graphics settings screen is one `Shell<GraphicsScreen>`; `GraphicsScreen::touch_view` says how it was opened, and `sheets()` returns only
+the Touch page when it is set and every page but that one when it is not, so neither side's search finds the other's rows (the flag is in `stamp()`, so
+the rows are built again when it changes). `OptionsUi::show` sets the flag each time it opens a page that `graphics_page` maps (`ControlsTouch`
+maps to `Page::Touch`); `video_open` leaves `ControlsTouch` out, as it is not a video screen. The touch editor now returns to `ControlsTouch` on Done
+(`game/touch_editor.rs`). The agent's page names gain `controls-touch` (`game/control.rs`), `ios_unused::page` lists the page as used, and the page
+button has a tooltip (`options_ui_pages.rs`) and language keys (`horizon.pages.open.touch`, `horizon.pages.touch.tooltip`). Nothing about the settings
+themselves, their file (`horizon-imc.txt`) or the launcher's Controls tab (`ImcSchema`) changed.
+
+### P.6 Frame counters for the session log (2026-11-17, M25 phase 0)
+
+`horizon-client-input/src/frame_probe.rs` (new): five process-wide atomic counters (frames, sum of durations, longest, frames over 16.7 ms, over 33.4 ms),
+added to once per rendered frame by one line in `game.rs` (next to `debug_charts.frame_times.log`, with the frame's `elapsed`), and read and cleared by
+`take()`. The bridge exports `horizon_ios_take_frame_window(out: *mut u64)` (five `u64`), which the app's session log calls every 5 seconds
+(`platform/ios/App/SessionLog.m`); `client_lib.rs` re-exports the module as `horizon_client::frame_probe` so the bridge needs no new dependency. It only
+counts: nothing in the game reads it, and nobody calls `take()` outside the iOS app.
+
+| File | Change |
+|---|---|
+| `horizon/crates/horizon-client-input/src/frame_probe.rs` | New (P.6), with three tests. |
+| `horizon/crates/horizon-client-input/src/lib.rs` | `pub mod frame_probe;`. |
+| `horizon/crates/horizon-client/src/client_lib.rs` | Re-exports `frame_probe`. |
+| `horizon/crates/horizon-client/src/game.rs` | One line: `frame_probe::record(elapsed)`. |
+| `horizon/platform/ios-bridge/src/lib.rs` | `horizon_ios_take_frame_window`. |
+| `horizon/crates/horizon-client-render/src/graphics_ui.rs` | `Page::Touch`, the split rows, `GraphicsScreen::touch_view`, the filter in `sheets()`. |
+| `horizon/crates/horizon-client-render/src/graphics_ui_hdr_tests.rs` | The test's `GraphicsScreen` literal gains `touch_view: false`. |
+| `horizon/crates/horizon-client-render/src/options_ui.rs` | `Page::ControlsTouch`, its `graphics_page` mapping and title, the flag set in `show`, `video_open`, and the Controls page's button. |
+| `horizon/crates/horizon-client-render/src/options_ui_pages.rs` | The page button's tooltip. |
+| `horizon/crates/horizon-client-render/src/ios_unused.rs` | `ControlsTouch` is a used page. |
+| `horizon/crates/horizon-client/src/game/control.rs` | The agent page name `controls-touch`. |
+| `horizon/crates/horizon-client/src/game/touch_editor.rs` | Done returns to `ControlsTouch`. |
+| `horizon/crates/horizon-client/assets/horizon/lang/en_us.json` | `horizon.pages.open.touch`, `horizon.pages.touch.tooltip`. |
+
 ## Q. Bedrock-style touch, steadier cursor, Shift, presets (2026-11-13)
 
 All in files that already carry iMC changes; no new file, no dependency or `Cargo.lock` change. The

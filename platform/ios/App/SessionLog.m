@@ -37,7 +37,10 @@ static NSString *BatteryStateName(NSInteger s) {
     }
 }
 
-static const char *kColumns = "seconds,footprint_mb,available_mb,thermal,low_power,battery_pct,battery_state,foreground,main_ticks_per_s,main_stalls,main_worst_ms";
+// The engine's frame counters (horizon/platform/ios-bridge): five uint64, read and cleared.
+extern void horizon_ios_take_frame_window(uint64_t *out);
+
+static const char *kColumns = "seconds,footprint_mb,available_mb,thermal,low_power,battery_pct,battery_state,foreground,main_ticks_per_s,main_stalls,main_worst_ms,frames_per_s,frame_avg_ms,frame_worst_ms,frames_over_17ms,frames_over_34ms";
 
 // Main-thread responsiveness. A display link on the main run loop is asked for once per screen refresh; how many
 // ticks arrive per second, and how many gaps are long (over 50 ms) and how long the worst one is, says whether the
@@ -69,18 +72,34 @@ static CADisplayLink *gLink;
 // seconds,footprint_mb,available_mb,thermal,low_power,battery_pct,battery_state,foreground
 // A value the system could not give is empty, never 0: a 0 would read as a measurement.
 // The same line with the main-thread probe's three columns. ticksPerSecond < 0 means no reading (empty cells).
-NSString *HorizonSessionLogLineWithTicks(double seconds, unsigned long long footprintMB,
+NSString *HorizonSessionLogLineWithFrames(double seconds, unsigned long long footprintMB,
                                 unsigned long long availableMB, NSInteger thermal,
                                 BOOL lowPower, float battery, NSInteger batteryState,
-                                BOOL foreground, double ticksPerSecond, unsigned stalls, unsigned worstMs) {
+                                BOOL foreground, double ticksPerSecond, unsigned stalls, unsigned worstMs,
+                                double framesPerSecond, double frameAvgMs, double frameWorstMs,
+                                unsigned long long over60, unsigned long long over30) {
     NSString *fp = footprintMB == ULLONG_MAX ? @"" : [NSString stringWithFormat:@"%llu", footprintMB];
     NSString *av = availableMB == ULLONG_MAX ? @"" : [NSString stringWithFormat:@"%llu", availableMB];
     // UIDevice.batteryLevel is -1 when monitoring is off or the level is unknown.
     NSString *bat = battery < 0 ? @"" : [NSString stringWithFormat:@"%d", (int)lroundf(battery * 100.0f)];
     NSString *probe = ticksPerSecond < 0 ? @",," : [NSString stringWithFormat:@"%.1f,%u,%u", ticksPerSecond, stalls, worstMs];
-    return [NSString stringWithFormat:@"%.1f,%@,%@,%@,%d,%@,%@,%d,%@", seconds, fp, av,
+    // The engine's frame times (the horizon_ios_take_frame_window counters): empty cells when the engine drew
+    // nothing in the window (it waits for Play, or the app is in the background), never zeros.
+    NSString *frames = framesPerSecond < 0 ? @",,,,"
+        : [NSString stringWithFormat:@"%.1f,%.2f,%.1f,%llu,%llu", framesPerSecond, frameAvgMs, frameWorstMs, over60, over30];
+    return [NSString stringWithFormat:@"%.1f,%@,%@,%@,%d,%@,%@,%d,%@,%@", seconds, fp, av,
             ThermalName(thermal), lowPower ? 1 : 0, bat, BatteryStateName(batteryState),
-            foreground ? 1 : 0, probe];
+            foreground ? 1 : 0, probe, frames];
+}
+
+// The same line without the engine's frame columns (empty cells).
+NSString *HorizonSessionLogLineWithTicks(double seconds, unsigned long long footprintMB,
+                                unsigned long long availableMB, NSInteger thermal,
+                                BOOL lowPower, float battery, NSInteger batteryState,
+                                BOOL foreground, double ticksPerSecond, unsigned stalls, unsigned worstMs) {
+    return HorizonSessionLogLineWithFrames(seconds, footprintMB, availableMB, thermal, lowPower, battery,
+                                           batteryState, foreground, ticksPerSecond, stalls, worstMs,
+                                           -1, 0, 0, 0, 0);
 }
 
 NSString *HorizonSessionLogLine(double seconds, unsigned long long footprintMB,
@@ -145,9 +164,20 @@ static void Sample(void) {
     uint32_t ticks = gTicks, stalls = gStalls, worst = gWorstMs;
     gTicks = 0; gStalls = 0; gWorstMs = 0;
     double rate = (window > 0.5 && gForeground != 0 && ticks > 0) ? ticks / window : -1;
-    NSString *line = HorizonSessionLogLineWithTicks(seconds, FootprintMB(), AvailableMB(), pi.thermalState,
+    // The engine's frame times for the same window (see frame_probe.rs in horizon/). The counters are read and
+    // cleared here every time, so a window never holds more than one sample's worth of frames.
+    uint64_t fw[5] = {0, 0, 0, 0, 0};
+    horizon_ios_take_frame_window(fw);
+    double fps = -1, avgMs = 0, worstMs = 0;
+    if (window > 0.5 && gForeground != 0 && fw[0] > 0) {
+        fps = fw[0] / window;
+        avgMs = (double)fw[1] / (double)fw[0] / 1e6;
+        worstMs = (double)fw[2] / 1e6;
+    }
+    NSString *line = HorizonSessionLogLineWithFrames(seconds, FootprintMB(), AvailableMB(), pi.thermalState,
                                            pi.lowPowerModeEnabled, dev.batteryLevel,
-                                           dev.batteryState, gForeground != 0, rate, stalls, worst);
+                                           dev.batteryState, gForeground != 0, rate, stalls, worst,
+                                           fps, avgMs, worstMs, fw[3], fw[4]);
     Append([line stringByAppendingString:@"\n"]);
     // A long session replaces the file rather than growing it without bound.
     if (gHandle && [gHandle offsetInFile] > kMaxBytes) StartNewFile();

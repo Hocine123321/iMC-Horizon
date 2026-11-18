@@ -96,7 +96,7 @@ impl Game<'_> {
         }
         self.settings.save(&Self::options_path());
         if editor.from_options {
-            self.open_options_at(false, horizon_client::options_ui::Page::GraphicsImc);
+            self.open_options_at(false, horizon_client::options_ui::Page::ControlsTouch);
         } else {
             self.screen = Screen::Playing;
             self.capture(true);

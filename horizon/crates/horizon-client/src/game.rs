@@ -11280,6 +11280,8 @@ impl Game<'_> {
                             self.record_frame_allocs();
                         }
                         self.debug_charts.frame_times.log(elapsed.as_nanos() as i64);
+                        // iMC: the iOS app's session log counts frames and their times (`frame_probe`).
+                        horizon_client_input::frame_probe::record(elapsed.as_nanos() as u64);
                         if self.frames == 0 {
                             // The launcher times Play to this line (launcher/src/perf.rs).
                             log::info!(

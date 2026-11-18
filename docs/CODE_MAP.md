@@ -139,8 +139,8 @@ All pure logic is in `IN/` (crate `horizon-client-input`) and is **unit tested o
 | `G/lifecycle.rs` | 47 | `app_suspended` (30 s save throttle), `app_memory_warning`. |
 | `RE/mobile_preset.rs` | 250 | "Phone preset" button: `Kind` (Mobile, Battery saver, Smooth), `apply_kind`, `current`. |
 | `RE/ios_unused.rs` | 270 | "Grey out unused settings": reasons for keyboard/mouse/desktop-only options (`opt`, `graphics`, `extra`, `page`, `pvp`). |
-| `RE/graphics_ui.rs` | 3680 | Video Settings rows, including the **iMC page** (`Page::Imc`, `Item::Imc`, `ImcDo`, `imc_description_key`, the rows near ~726-790, `blocked` ~1263). |
-| `RE/options_ui.rs` | 8530 | The options screens: `Page::GraphicsImc` (the iMC page lives inside Video Settings), `Page::TouchButtons`, the click handler (~2335 `ImcDo::...`), tooltips. |
+| `RE/graphics_ui.rs` | 3680 | Video Settings rows, including the **iMC page** (graphics side: `Page::Imc`) and the **touch page** (`Page::Touch`, opened by Controls > Touch Controls..., hidden from the Video Settings tabs through `GraphicsScreen::touch_view`); `Item::Imc`, `ImcDo`, `imc_description_key`, the rows near ~726-830, `blocked` ~1263. |
+| `RE/options_ui.rs` | 8530 | The options screens: `Page::GraphicsImc` (the iMC page lives inside Video Settings), `Page::ControlsTouch` (the touch settings, from the Controls page), `Page::TouchButtons`, the click handler (~2335 `ImcDo::...`), tooltips. |
 | `RE/settings.rs` | 1280 | `Settings` struct with the touch fields (`imc`, `touch_layout`, `touch_calibration`, `touch_extras`, `touch_presets`) and their load (~377-445) and save (~760-780). |
 | `horizon/crates/horizon-client/assets/horizon/lang/en_us.json` | | One caption + one `.tooltip` per setting under `horizon.imc.*`. Tests compare these to the Rust English strings. |
 
@@ -174,7 +174,7 @@ Per frame: `G/window_handler.rs` `idle` -> `touch_frame` (applies settings, `cur
 
 ### Add an iMC setting (a new row on the iMC page) — every step, all verified on the AirHold change
 1. `IN/imc_settings.rs`: add a variant to `enum Item` and to `Item::ALL` (and bump the array length); add the arms in `key()` (the file key), `caption()`, `description()` (the tooltip English text), and `cost()` if heavy; add the field to `struct ImcSettings`, its default in `Default`, the `parse` arm (clamp it), the `serialize` format string **and its argument list**, `value()`, `cycle()`, `is_active()` (greying), and `apply()` if it feeds `Touch`. Add step tables (`const NAMES`, values) at the top. Add tests next to the others.
-2. `RE/graphics_ui.rs`: add the arm in `imc_description_key` (~229) **and** a row `m(I::YourItem, Cost)` in the iMC page rows (~726-790), in the order you want. `blocked()`/grey rules are in `ImcSettings::is_active`.
+2. `RE/graphics_ui.rs`: add the arm in `imc_description_key` (~229) **and** a row `m(I::YourItem, Cost)` in the page it belongs to (`Page::Imc` for graphics and memory, `Page::Touch` for touch and cursor), in the order you want. `blocked()`/grey rules are in `ImcSettings::is_active`.
 3. `horizon/crates/horizon-client/assets/horizon/lang/en_us.json`: add `horizon.imc.<key>` and `horizon.imc.<key>.tooltip` (must equal the Rust English text exactly; tests compare).
 4. If the game uses it: read `self.settings.imc.<field>` in `G/touch.rs` (or the right glue file).
 5. **`platform/ios/App/Swift/ControlsModel.swift` `ImcSchema.entries`: add the `Entry`** (same key, `.flag` or `.steps(n)`, same default), in the game's write order. Otherwise the launcher's Controls tab silently resets your setting.

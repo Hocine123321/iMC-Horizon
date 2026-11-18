@@ -29,8 +29,14 @@ own "I'm playing" ping, which is unchanged.)
 | `main_ticks_per_s` | How many times per second the main thread answered a display-link tick (a healthy phone shows its screen rate, 60 or 120). Empty in the background. |
 | `main_stalls` | Gaps over 50 ms between two ticks in this 5 second window. 0 is what you want. |
 | `main_worst_ms` | The longest gap between two ticks in the window, in milliseconds. |
+| `frames_per_s` | Frames the **engine** rendered per second in the window (added 2026-11-17). Empty while the engine draws nothing (it waits for Play, or the app is in the background). |
+| `frame_avg_ms` | The average time of those frames, in milliseconds. |
+| `frame_worst_ms` | The slowest frame in the window, in milliseconds. |
+| `frames_over_17ms` | How many frames took longer than 16.7 ms (missed a 60 Hz refresh). |
+| `frames_over_34ms` | How many took longer than 33.4 ms (missed 30 Hz). 0 is what you want. |
 
-The three `main_` columns (added 2026-11-12) measure the thread that feeds the engine's window events and the
+The five `frame` columns come from the engine itself (`frame_probe.rs` in `horizon/`, read through the bridge each sample), which
+is the number the performance plan (`IOS_PERFORMANCE_PLAN.md`) is measured by. The three `main_` columns (added 2026-11-12) measure the thread that feeds the engine's window events and the
 launcher, not the engine's own frames. A low `main_ticks_per_s` with stalls means that thread is being held up;
 a normal one with a laggy game points at the engine's render or simulation threads instead.
 

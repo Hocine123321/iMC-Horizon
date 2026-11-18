@@ -33,9 +33,14 @@ pub enum Page {
     Advanced,
     /// HDR output's own settings.
     Hdr,
-    /// The iOS app's own settings (`imc_settings`): touch controls, the cursor and Auto
-    /// Performance. Last, so the pages before it keep their places.
+    /// The iOS app's own graphics-side settings (`imc_settings`): Auto Performance, the phone
+    /// preset and the settings greying. Last of the listed pages, so the ones before it keep
+    /// their places.
     Imc,
+    /// The iOS app's touch settings (`imc_settings`): the on-screen controls, touch alignment
+    /// and the cursor. Not one of this screen's tabs ([`Page::ALL`]): the Controls page opens it
+    /// on its own (`GraphicsScreen::touch_view`, `options_ui::Page::ControlsTouch`).
+    Touch,
 }
 impl Page {
     pub const ALL: [Page; 7] = [
@@ -56,6 +61,7 @@ impl Page {
             Page::Advanced => "Advanced",
             Page::Hdr => "HDR",
             Page::Imc => "iMC",
+            Page::Touch => "Touch",
         }
     }
     /// What the page holds, in the strip while no setting is pointed at.
@@ -67,7 +73,8 @@ impl Page {
             Page::Shaders => "Shader packs, Horizon's and shaders/ folder ones, and their options.",
             Page::Advanced => "How frames reach the screen, and the performance overlay.",
             Page::Hdr => "Brighter-than-white output on an HDR display.",
-            Page::Imc => "The iPhone app's own settings: touch controls, the cursor and Auto Performance.",
+            Page::Imc => "The iPhone app's own settings: Auto Performance, the phone preset and greying what an iPhone doesn't use.",
+            Page::Touch => "The on-screen controls, where touches land, and the cursor.",
         }
     }
 }
@@ -752,6 +759,31 @@ pub fn rows() -> Vec<(Page, Vec<(&'static str, Vec<Setting>)>)> {
                 use horizon_client_input::imc_settings::Item as I;
                 vec![
                     (
+                        "Auto Performance",
+                        vec![
+                            m(I::AutoPerformance, Saves),
+                            m(I::AutoSensitivity, None),
+                            m(I::AutoRenderDistance, Saves),
+                            m(I::AutoMinDistance, None),
+                            m(I::AutoFarTerrain, Saves),
+                            m(I::AutoResolution, Saves),
+                        ],
+                    ),
+                    ("Interface", vec![m(I::GreyUnused, None)]),
+                    (
+                        "Presets",
+                        vec![md(ImcDo::MobilePreset, Saves), md(ImcDo::Reset, None)],
+                    ),
+                ]
+            },
+        ),
+        // The touch settings, which the Controls page opens (`Page::Touch` is not a tab here).
+        (
+            Page::Touch,
+            {
+                use horizon_client_input::imc_settings::Item as I;
+                vec![
+                    (
                         "Touch controls",
                         vec![
                             m(I::Controls, None),
@@ -765,14 +797,14 @@ pub fn rows() -> Vec<(Page, Vec<(&'static str, Vec<Setting>)>)> {
                             m(I::MoveZone, None),
                             m(I::AutoSprint, None),
                             md(ImcDo::EditControls, None),
+                            md(ImcDo::ExtraButtons, None),
                         ],
                     ),
                     (
-                        "Screen",
+                        "Touch alignment",
                         vec![
-                            m(I::SafeMargin, None),
                             m(I::MenuTouch, None),
-                            m(I::GreyUnused, None),
+                            m(I::SafeMargin, None),
                             m(I::ShiftX, None),
                             m(I::ShiftY, None),
                             m(I::ButtonShiftX, None),
@@ -787,25 +819,6 @@ pub fn rows() -> Vec<(Page, Vec<(&'static str, Vec<Setting>)>)> {
                             m(I::CursorSpeed, None),
                             m(I::CursorHold, None),
                             m(I::CursorDragGrab, None),
-                        ],
-                    ),
-                    (
-                        "Auto Performance",
-                        vec![
-                            m(I::AutoPerformance, Saves),
-                            m(I::AutoSensitivity, None),
-                            m(I::AutoRenderDistance, Saves),
-                            m(I::AutoMinDistance, None),
-                            m(I::AutoFarTerrain, Saves),
-                            m(I::AutoResolution, Saves),
-                        ],
-                    ),
-                    (
-                        "Presets",
-                        vec![
-                            md(ImcDo::MobilePreset, Saves),
-                            md(ImcDo::ExtraButtons, None),
-                            md(ImcDo::Reset, None),
                         ],
                     ),
                 ]
@@ -1675,6 +1688,10 @@ pub struct GraphicsScreen {
     /// The output of the renderer the settings are drawn for (`OptionsUi::draw`), handed in
     /// each time the screen is reached.
     pub(crate) output: EffectiveOutput,
+    /// iMC: the screen is open as the Controls page's touch settings (`Page::Touch` alone), not as
+    /// Horizon's graphics settings (every page but that one). The options screen sets it each
+    /// time it opens either.
+    pub(crate) touch_view: bool,
 }
 
 impl Screen for GraphicsScreen {
@@ -1692,7 +1709,7 @@ impl Screen for GraphicsScreen {
             g::gpu_culling_offer(),
             g::reduced_far_detail_suggested(),
         );
-        shell::stamp_of(&(read(s), s.fullbright_held, offers))
+        shell::stamp_of(&(read(s), s.fullbright_held, offers, self.touch_view))
     }
     fn sheets(&self, s: &Settings) -> Vec<Sheet<Page, Item>> {
         let sheet = |(page, groups): (Page, Vec<(&'static str, Vec<Setting>)>)| Sheet {
@@ -1713,7 +1730,13 @@ impl Screen for GraphicsScreen {
             listed: true,
             heading: None,
         };
-        rows().into_iter().map(sheet).collect()
+        // One screen, two ways in: the touch page alone (Controls > Touch controls), or every
+        // other page (Video Settings), so neither one's search finds the other's rows.
+        rows()
+            .into_iter()
+            .filter(|(page, _)| (*page == Page::Touch) == self.touch_view)
+            .map(sheet)
+            .collect()
     }
     fn press(&mut self, s: &mut Settings, item: Item, back: bool) -> Vec<Output> {
         match item {
@@ -2339,6 +2362,7 @@ mod tests {
         let mut screen = GraphicsScreen {
             framebuffer: FB,
             output: NONE,
+            touch_view: false,
         };
         let default = Settings::default();
         for (_, item) in items() {

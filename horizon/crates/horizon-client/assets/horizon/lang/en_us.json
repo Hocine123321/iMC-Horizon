@@ -275,6 +275,8 @@
   "horizon.pages.open.graphics_advanced": "Advanced Graphics...",
   "horizon.pages.open.shader_packs": "Shader Packs...",
   "horizon.pages.open.controller": "Controller Settings...",
+  "horizon.pages.open.touch": "Touch Controls...",
+  "horizon.pages.touch.tooltip": "The iPhone app's touch settings: the on-screen controls and their style, where touches land, and the cursor.",
   "horizon.pages.open.split_setup": "Splitscreen...",
   "horizon.pages.open.extras": "Extras...",
   "horizon.pages.open.mods": "Mods...",

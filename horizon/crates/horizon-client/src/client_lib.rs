@@ -175,6 +175,7 @@ pub use horizon_client_input::actions;
 pub use horizon_client_input::clipboard;
 pub use horizon_client_input::gamepad;
 pub use horizon_client_input::gameplay_guide;
+pub use horizon_client_input::frame_probe;
 pub use horizon_client_input::held;
 pub use horizon_client_input::input;
 pub use horizon_client_input::input_source;

@@ -8,7 +8,8 @@
 // What a row holds: seconds since the app started, the app's memory footprint and what iOS says
 // it may still use (the two numbers the jetsam limit is judged by), the thermal state, Low Power
 // Mode, the battery level and whether it is charging, and whether the app is in the foreground.
-// The engine's own frame times are not here: they need the engine, and `horizon/` is not touched.
+// The engine's frame times are the last five columns (frames per second, average and worst frame in ms, frames
+// over 16.7 ms and over 33.4 ms), read from the engine through the bridge (`frame_probe.rs` in horizon/).
 #import <Foundation/Foundation.h>
 
 // Call once, early in main(). `root` is Documents/Horizon. Starts a new log (the last one is kept
@@ -21,6 +22,14 @@ NSString *HorizonSessionLogLine(double seconds, unsigned long long footprintMB,
                                 unsigned long long availableMB, NSInteger thermal,
                                 BOOL lowPower, float battery, NSInteger batteryState,
                                 BOOL foreground);
+
+// The same with the engine's frame columns: framesPerSecond < 0 writes empty cells (the engine drew nothing).
+NSString *HorizonSessionLogLineWithFrames(double seconds, unsigned long long footprintMB,
+                                unsigned long long availableMB, NSInteger thermal,
+                                BOOL lowPower, float battery, NSInteger batteryState,
+                                BOOL foreground, double ticksPerSecond, unsigned stalls, unsigned worstMs,
+                                double framesPerSecond, double frameAvgMs, double frameWorstMs,
+                                unsigned long long over60, unsigned long long over30);
 
 // The same with the main-thread probe's columns (ticks per second, long gaps, worst gap in ms).
 // ticksPerSecond < 0 writes empty cells (no reading), never a 0.

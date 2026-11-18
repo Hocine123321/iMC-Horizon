@@ -65,6 +65,23 @@ pub extern "C" fn horizon_ios_hold_state() -> i32 {
     }
 }
 
+/// The shell's session log reads the engine's frame times since its last call: five `u64` written to `out`, in this
+/// order: frames rendered, the sum of their durations in nanoseconds, the longest one in nanoseconds, how many ran
+/// over 16.7 ms and how many over 33.4 ms (`horizon_client_input::frame_probe`). The counters start again from zero.
+/// Does nothing when `out` is null. Safe to call from any thread, at any time (before the engine starts it reads zeros).
+///
+/// # Safety
+/// `out` must be null or point to room for five `u64`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn horizon_ios_take_frame_window(out: *mut u64) {
+    if out.is_null() {
+        return;
+    }
+    let w = horizon_client::frame_probe::take();
+    // SAFETY: the caller promised room for five u64.
+    unsafe { out.copy_from_nonoverlapping([w.frames, w.sum_ns, w.max_ns, w.over_60, w.over_30].as_ptr(), 5) };
+}
+
 /// The shell allows Quit Game to go back to the launcher instead of ending the process. Call it with
 /// [`horizon_ios_arm_hold`], before [`horizon_ios_main`]; never called, Quit Game ends the process as always.
 #[unsafe(no_mangle)]

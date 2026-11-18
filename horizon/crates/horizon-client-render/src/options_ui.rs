@@ -1262,8 +1262,12 @@ pub enum Page {
     Graphics,
     GraphicsAdvanced,
     GraphicsHdr,
-    /// The graphics screen at its iMC page: the iOS app's own settings (`imc_settings`).
+    /// The graphics screen at its iMC page: the iOS app's own graphics-side settings (`imc_settings`):
+    /// Auto Performance, the phone preset and the settings greying.
     GraphicsImc,
+    /// Controls > Touch Controls: the iOS app's touch settings (`imc_settings`), the same settings
+    /// screen as the graphics one opened on its Touch page alone (`GraphicsScreen::touch_view`).
+    ControlsTouch,
     /// HDR calibration, full screen (`calibration`).
     HdrCalibration,
     /// Horizon's controller settings and button binds.
@@ -2160,6 +2164,8 @@ impl OptionsUi {
             self.shader.show(at);
         }
         if let Some(at) = Self::graphics_page(page) {
+            // One screen, two ways in: the Controls page's touch settings, or Video Settings.
+            self.graphics.screen.touch_view = page == Page::ControlsTouch;
             self.graphics.show(at);
         }
         if let Some(at) = Self::controller_page(page) {
@@ -2183,7 +2189,8 @@ impl OptionsUi {
     /// Whether a video settings screen is open, Horizon's or vanilla's: the fullscreen mode
     /// waits for it to close, and Ctrl with the wheel steps the GUI scale.
     pub fn video_open(&self) -> bool {
-        self.page() == Page::Video || Self::graphics_page(self.page()).is_some()
+        self.page() == Page::Video
+            || (self.page() != Page::ControlsTouch && Self::graphics_page(self.page()).is_some())
     }
     /// Where the graphics screen opens for `page`, if it is one of its pages.
     fn graphics_page(page: Page) -> Option<crate::graphics_ui::Page> {
@@ -2192,6 +2199,7 @@ impl OptionsUi {
             Page::GraphicsAdvanced => Some(crate::graphics_ui::Page::Advanced),
             Page::GraphicsHdr => Some(crate::graphics_ui::Page::Hdr),
             Page::GraphicsImc => Some(crate::graphics_ui::Page::Imc),
+            Page::ControlsTouch => Some(crate::graphics_ui::Page::Touch),
             _ => None,
         }
     }
@@ -2223,6 +2231,7 @@ impl OptionsUi {
             | Page::GraphicsHdr
             | Page::GraphicsImc
             | Page::HdrCalibration => "options.videoTitle",
+            Page::ControlsTouch => "controls.title",
             Page::Controller | Page::PadBinds => "horizon.pages.controller",
             Page::ControllerRadial => "horizon.pages.controller_radial",
             Page::ControllerRadialName => "horizon.radial.name_title",
@@ -2721,6 +2730,17 @@ impl OptionsUi {
                         310.0,
                         tr("horizon.pages.open.controller"),
                         Act::Push(Page::Controller),
+                    ),
+                    None,
+                ));
+                // iMC: the touch settings, which lived on the graphics screen's iMC page.
+                rows.push(Row::Buttons(
+                    button(
+                        0.0,
+                        0.0,
+                        310.0,
+                        tr("horizon.pages.open.touch"),
+                        Act::Push(Page::ControlsTouch),
                     ),
                     None,
                 ));

@@ -11,6 +11,7 @@ pub mod gameplay_guide;
 pub mod held;
 pub mod imc_settings;
 pub mod input;
+pub mod frame_probe;
 pub mod ios_hold;
 pub mod input_source;
 pub mod interaction_input;
