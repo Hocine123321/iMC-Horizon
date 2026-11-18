@@ -1,22 +1,21 @@
 #import "AccountClient.h"
 #import "AccountStore.h"
 
-// The services, as in horizon/docs/microsoft-account.md.
-static NSString *const kMicrosoft = @"https://login.microsoftonline.com/consumers/oauth2/v2.0";
+// The services. Sign-in is the legacy Microsoft one (login.live.com, the app ID most launchers use): a device code,
+// then the old scope, then a bare Xbox ticket. Xbox Live, XSTS and the Minecraft services are as in
+// horizon/docs/microsoft-account.md.
 static NSString *const kXboxUser = @"https://user.auth.xboxlive.com/user/authenticate";
 static NSString *const kXsts = @"https://xsts.auth.xboxlive.com/xsts/authorize";
 static NSString *const kMinecraft = @"https://api.minecraftservices.com";
-static NSString *const kScope = @"XboxLive.signin offline_access";
-// Test mode only (HZSignInIsTestMode): the legacy live.com endpoints a legacy app ID needs.
 static NSString *const kLiveDeviceCode = @"https://login.live.com/oauth20_connect.srf";
 static NSString *const kLiveToken = @"https://login.live.com/oauth20_token.srf";
 static NSString *const kLegacyScope = @"service::user.auth.xboxlive.com::MBI_SSL";
 
-static NSString *DeviceCodeURL(void) { return HZSignInIsTestMode() ? kLiveDeviceCode : [kMicrosoft stringByAppendingString:@"/devicecode"]; }
-static NSString *TokenURL(void) { return HZSignInIsTestMode() ? kLiveToken : [kMicrosoft stringByAppendingString:@"/token"]; }
-static NSString *ScopeForRequests(void) { return HZSignInIsTestMode() ? kLegacyScope : kScope; }
-// The ticket Xbox Live wants: v2 tokens carry "d=" in front, the legacy ones go bare.
-static NSString *RpsTicket(NSString *msAccess) { return HZSignInIsTestMode() ? msAccess : [@"d=" stringByAppendingString:msAccess]; }
+static NSString *DeviceCodeURL(void) { return kLiveDeviceCode; }
+static NSString *TokenURL(void) { return kLiveToken; }
+static NSString *ScopeForRequests(void) { return kLegacyScope; }
+// The ticket Xbox Live wants: the legacy tokens go bare (the v2 ones carried "d=" in front).
+static NSString *RpsTicket(NSString *msAccess) { return msAccess; }
 
 // One answer. `reached` is NO for a request that went nowhere (no network, a timeout), as against
 // one that got an answer of any status. (A class, not a struct: ARC does not allow objects in one.)
@@ -102,10 +101,9 @@ static NSString *const kOffline = @"Could not reach Microsoft. Check your intern
 
 - (void)requestDeviceCode:(HZDeviceCodeDone)done {
     NSString *client = HZActiveClientID();
-    if (!client) { Main(^{ done(nil, HZSignInNotConfigured); }); return; }
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         NSMutableDictionary *form = [@{ @"client_id": client, @"scope": ScopeForRequests() } mutableCopy];
-        if (HZSignInIsTestMode()) form[@"response_type"] = @"device_code";   // live.com asks for it
+        form[@"response_type"] = @"device_code";   // live.com asks for it
         Reply *r = [self send:@"POST" url:DeviceCodeURL() form:form json:nil bearer:nil];
         if (!r.reached) { Main(^{ done(nil, kOffline); }); return; }
         NSString *error = nil;
@@ -169,7 +167,6 @@ static NSString *const kOffline = @"Could not reach Microsoft. Check your intern
     self.cancelled = NO;
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         void (^fail)(NSString *) = ^(NSString *m) { Main(^{ done(nil, m); }); };
-        if (!client) { fail(HZSignInNotConfigured); return; }
         Main(^{ status(@"Waiting for you to sign in..."); });
         // Poll at the code's interval until the player is done, the code runs out or they cancel.
         NSTimeInterval interval = code.interval;

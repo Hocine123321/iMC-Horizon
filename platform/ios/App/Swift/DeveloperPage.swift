@@ -15,7 +15,7 @@ struct DeveloperPage: View {
     @State private var idText = ""
     @State private var idProblem: String? = nil
     @State private var idSaved = false
-    @State private var storedID: String? = HZLegacyTestClientID()
+    @State private var storedID: String? = HZCustomClientID()
     @FocusState private var idFocused: Bool
 
     private var version: String { (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "?" }
@@ -36,9 +36,9 @@ struct DeveloperPage: View {
 
             SectionLabel("Sign-in")
             GlassGroup {
-                stateRow("person.badge.key.fill", .brand2, "Sign-in mode", signInMode.value, signInMode.kind)
+                stateRow("person.badge.key.fill", .brand2, "Sign-in app ID", signInMode.value, signInMode.kind)
                 Sep()
-                testModeEditor
+                appIDEditor
             }
 
             SectionLabel("This build")
@@ -64,12 +64,12 @@ struct DeveloperPage: View {
         }
     }
 
-    /// Paste another launcher's app ID here instead of making test-client-id.txt in the Files app. Kept on this
-    /// phone only (the same file, so the Files route still works), never in a build, never logged.
-    private var testModeEditor: some View {
+    /// Paste a different app ID here instead of making app-id.txt in the Files app. Kept on this phone only
+    /// (the same file, so the Files route still works), never in a build, never logged.
+    private var appIDEditor: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Test mode app ID (private)").font(.body.weight(.semibold))
-            Text("Signs in with another launcher's app ID while this project has none of its own. Not for sharing, and it can stop working at any time. The ID stays on this phone. Saved here, it applies to the next sign-in. A build with its own app ID ignores it.")
+            Text("Use a different app ID").font(.body.weight(.semibold))
+            Text("Sign-in uses the built-in app ID, so you do not need to set anything. If it stops working, paste another launcher's legacy app ID here. It stays on this phone and applies to the next sign-in.")
                 .font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 8) {
                 Image(systemName: "key.fill").foregroundStyle(.secondary)
@@ -105,7 +105,7 @@ struct DeveloperPage: View {
             }
             if storedID != nil {
                 Button(role: .destructive) { clearID() } label: {
-                    Text("Remove the saved ID").font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity, minHeight: 36)
+                    Text("Go back to the built-in app ID").font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity, minHeight: 36)
                 }
                 .secondaryAction().tint(Palette.red)
             }
@@ -119,13 +119,13 @@ struct DeveloperPage: View {
 
     private func saveID() {
         var problem: NSString? = nil
-        if HZSetLegacyTestClientID(idText, &problem) {
+        if HZSetCustomClientID(idText, &problem) {
             Haptics.success()
             idProblem = nil
             idSaved = true
             idText = ""
             idFocused = false
-            storedID = HZLegacyTestClientID()
+            storedID = HZCustomClientID()
         } else {
             Haptics.warning()
             idProblem = (problem as String?) ?? "That ID could not be saved."
@@ -134,11 +134,11 @@ struct DeveloperPage: View {
 
     private func clearID() {
         var problem: NSString? = nil
-        _ = HZSetLegacyTestClientID(nil, &problem)
+        _ = HZSetCustomClientID(nil, &problem)
         Haptics.tap()
         idSaved = false
         idProblem = nil
-        storedID = HZLegacyTestClientID()
+        storedID = HZCustomClientID()
     }
 
     private var warning: some View {
@@ -156,9 +156,7 @@ struct DeveloperPage: View {
     }
 
     private var signInMode: (value: String, kind: StatusPill.Kind) {
-        if HZMicrosoftClientID() != nil { return ("This build's own app ID", .ok) }
-        if HZSignInIsTestMode() { return ("Test mode", .warn) }
-        return ("Not set up", .bad)
+        HZCustomClientID() != nil ? ("Set by you", .warn) : ("Built in", .ok)
     }
 
     private func stateRow(_ symbol: String, _ tone: IconTile.Tone, _ title: String, _ value: String, _ kind: StatusPill.Kind) -> some View {

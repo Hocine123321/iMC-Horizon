@@ -62,11 +62,6 @@ targets:
         # announcement is UDP multicast on 224.0.2.60:4445, not Bonjour, so no NSBonjourServices).
         # Without this text iOS 14 and later blocks local traffic and shows no prompt.
         NSLocalNetworkUsageDescription: iMC Horizon uses your local network to find and join Minecraft worlds hosted on other devices in your home.
-        # The owner's own Azure app (docs/IOS_SIGN_IN.md). Empty until it is registered and Mojang has
-        # approved it; the Account screen says so. A GitHub repository variable HZ_MSA_CLIENT_ID fills it
-        # (a client ID is public, not a secret). A build never carries another application's ID; the owner's
-        # private test mode (docs/IOS_SIGN_IN.md, "Test mode") reads one from the phone, not from here.
-        HZMicrosoftClientID: "$(HZ_MSA_CLIENT_ID)"
     settings:
       base:
         INFOPLIST_FILE: App/Info.plist
@@ -75,8 +70,6 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
         HZ_BUILD_TAG: "dev"
         HZ_COMMIT: "local"
-        # Empty unless the build passes HZ_MSA_CLIENT_ID (xcodebuild HZ_MSA_CLIENT_ID=...): no sign-in then.
-        HZ_MSA_CLIENT_ID: ""
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # One alternate icon per colour theme (the first theme is the AppIcon itself). tools/make_app_icon.py draws them and
         # checks this list; AppIconTheme.swift switches to the one that matches the theme.

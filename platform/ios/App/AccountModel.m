@@ -1,23 +1,14 @@
 #import "AccountModel.h"
 
-NSString *const HZSignInNotConfigured =
-    @"This build of iMC Horizon has no Microsoft sign-in yet, so it can't download the game. Use Game files to import a folder you prepared on your computer.";
 NSString *const HZDoesNotOwn = @"This account doesn't own Minecraft: Java Edition.";
 NSString *const HZNoProfile =
     @"This account has no Minecraft profile yet. Create one at minecraft.net, then sign in again.";
 NSString *const HZSignInAgain = @"Your Microsoft sign-in expired. Sign in again.";
 NSString *const HZAppNotApproved =
-    @"The Minecraft services refused this app: its app is not approved by Mojang yet.";
+    @"The Minecraft services refused this sign-in. The app ID it uses may be blocked right now. Try again later, or set a different app ID in Settings > Developer options.";
 
-NSString *HZMicrosoftClientID(void) {
-    NSString *id_ = NSProcessInfo.processInfo.environment[@"HORIZON_MSA_CLIENT_ID"];
-    if (!id_) id_ = NSBundle.mainBundle.infoDictionary[@"HZMicrosoftClientID"];
-    if (![id_ isKindOfClass:NSString.class]) return nil;
-    id_ = [id_ stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-    // An unfilled build setting arrives as its own name, "$(HZ_MSA_CLIENT_ID)": that is none.
-    if (id_.length == 0 || [id_ hasPrefix:@"$("]) return nil;
-    return id_;
-}
+// The legacy Microsoft app ID of the official launcher family, which most launchers sign in with.
+NSString *const HZDefaultClientID = @"00000000402b5328";
 
 // A client ID is letters, digits and dashes only, 8 to 64 long. Anything else is not an ID, so it is not used.
 static NSString *CleanClientID(NSString *raw) {
@@ -29,51 +20,54 @@ static NSString *CleanClientID(NSString *raw) {
     return id_;
 }
 
-static NSString *LegacyTestIDFile(void) {
+static NSString *IDFile(NSString *name) {
     NSString *docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
-    return [[docs stringByAppendingPathComponent:@"Horizon"] stringByAppendingPathComponent:@"test-client-id.txt"];
+    return [[docs stringByAppendingPathComponent:@"Horizon"] stringByAppendingPathComponent:name];
 }
 
-static NSString *ReadLegacyTestClientID(void) {
-    // Never baked into a build, so it cannot be shared by accident. Two places, the first wins:
-    //  1. the environment variable HORIZON_MSA_LEGACY_CLIENT_ID (a desktop run, or a launcher that sets one);
-    //  2. the file Documents/Horizon/test-client-id.txt: written by Settings > Developer options (where the
-    //     player pastes the ID), or put there by hand with the Files app. One line: the ID.
-    NSString *id_ = NSProcessInfo.processInfo.environment[@"HORIZON_MSA_LEGACY_CLIENT_ID"];
-    if (![id_ isKindOfClass:NSString.class] || id_.length == 0) {
-        NSString *file = LegacyTestIDFile();
-        // Only a short file counts: an ID is 16 to 36 characters, so a stray large file is not read whole.
-        NSDictionary *attrs = [NSFileManager.defaultManager attributesOfItemAtPath:file error:nil];
-        if (attrs && [attrs fileSize] > 0 && [attrs fileSize] <= 256) {
-            id_ = [NSString stringWithContentsOfFile:file encoding:NSUTF8StringEncoding error:nil];
-        }
-    }
-    return CleanClientID(id_);
+// Only a short file counts: an ID is 16 to 36 characters, so a stray large file is not read whole.
+static NSString *ReadIDFile(NSString *name) {
+    NSString *file = IDFile(name);
+    NSDictionary *attrs = [NSFileManager.defaultManager attributesOfItemAtPath:file error:nil];
+    if (!attrs || [attrs fileSize] == 0 || [attrs fileSize] > 256) return nil;
+    return [NSString stringWithContentsOfFile:file encoding:NSUTF8StringEncoding error:nil];
 }
 
-// Read once, and again only when the player sets or clears it in the app: the mode must not change under a
+static NSString *ReadCustomClientID(void) {
+    // Never baked into a build. Three places, the first that holds a valid ID wins:
+    //  1. the environment variable HORIZON_MSA_CLIENT_ID (a desktop run, or a launcher that sets one);
+    //  2. Documents/Horizon/app-id.txt, written by Settings > Developer options or put there with the Files app;
+    //  3. Documents/Horizon/test-client-id.txt, the name the first version used.
+    NSString *id_ = CleanClientID(NSProcessInfo.processInfo.environment[@"HORIZON_MSA_CLIENT_ID"]);
+    if (!id_) id_ = CleanClientID(ReadIDFile(@"app-id.txt"));
+    if (!id_) id_ = CleanClientID(ReadIDFile(@"test-client-id.txt"));
+    return id_;
+}
+
+// Read once, and again only when the player sets or clears it in the app: the ID must not change under a
 // sign-in that has started, and the file is not read again for every request.
-static NSString *sCachedTestID;
-static BOOL sCachedTestIDLoaded;
-static NSObject *TestIDLock(void) {
+static NSString *sCachedID;
+static BOOL sCachedIDLoaded;
+static NSObject *IDLock(void) {
     static NSObject *lock; static dispatch_once_t once;
     dispatch_once(&once, ^{ lock = [NSObject new]; });
     return lock;
 }
 
-NSString *HZLegacyTestClientID(void) {
-    @synchronized (TestIDLock()) {
-        if (!sCachedTestIDLoaded) { sCachedTestID = ReadLegacyTestClientID(); sCachedTestIDLoaded = YES; }
-        return sCachedTestID;
+NSString *HZCustomClientID(void) {
+    @synchronized (IDLock()) {
+        if (!sCachedIDLoaded) { sCachedID = ReadCustomClientID(); sCachedIDLoaded = YES; }
+        return sCachedID;
     }
 }
 
-BOOL HZSetLegacyTestClientID(NSString *value, NSString **problem) {
-    NSString *file = LegacyTestIDFile();
+BOOL HZSetCustomClientID(NSString *value, NSString **problem) {
+    NSString *file = IDFile(@"app-id.txt");
     NSString *trimmed = [value stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-    @synchronized (TestIDLock()) {
+    @synchronized (IDLock()) {
         if (trimmed.length == 0) {
             [NSFileManager.defaultManager removeItemAtPath:file error:nil];
+            [NSFileManager.defaultManager removeItemAtPath:IDFile(@"test-client-id.txt") error:nil];
         } else {
             NSString *clean = CleanClientID(trimmed);
             if (!clean) {
@@ -87,15 +81,15 @@ BOOL HZSetLegacyTestClientID(NSString *value, NSString **problem) {
                 if (problem) *problem = @"The ID could not be saved on this phone.";
                 return NO;
             }
+            // An older file under the first version's name must not win back over the new one.
+            [NSFileManager.defaultManager removeItemAtPath:IDFile(@"test-client-id.txt") error:nil];
         }
-        sCachedTestIDLoaded = NO;   // read again on the next ask
+        sCachedIDLoaded = NO;   // read again on the next ask
     }
     return YES;
 }
 
-BOOL HZSignInIsTestMode(void) { return HZMicrosoftClientID() == nil && HZLegacyTestClientID() != nil; }
-
-NSString *HZActiveClientID(void) { return HZMicrosoftClientID() ?: HZLegacyTestClientID(); }
+NSString *HZActiveClientID(void) { return HZCustomClientID() ?: HZDefaultClientID; }
 
 // The reply as a dictionary, or nil when it is not a JSON object.
 static NSDictionary *Object(NSData *body) {

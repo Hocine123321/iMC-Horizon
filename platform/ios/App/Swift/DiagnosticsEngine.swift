@@ -444,7 +444,7 @@ enum DiagnosticsSuite {
         // ---- Account
         let accountName = HZAccountStore.shared().account()?.name
         let accountOwns = HZAccountStore.shared().account()?.owns ?? false
-        let signInConfigured = HZActiveClientID() != nil
+        let customSignInID = HZCustomClientID() != nil
         let checkedAt = LauncherFile.number("accountChecked", default: 0)
         add("account", "Account", "Microsoft account", "person.crop.circle") {
             guard let n = accountName else { return Outcome(status: .info, detail: "Not signed in. You only need an account to download the game.") }
@@ -453,8 +453,7 @@ enum DiagnosticsSuite {
             return Outcome(status: .pass, detail: "\(n) owns Minecraft: Java Edition.\(when)")
         }
         add("signin", "Account", "Sign-in setup", "key") {
-            signInConfigured ? Outcome(status: .pass, detail: HZSignInIsTestMode() ? "Test mode: another launcher's app ID is used (this phone only)." : "This build has its own Microsoft app ID.")
-                             : Outcome(status: .warn, detail: "This build has no Microsoft sign-in set up.", advice: "Use Game files to import a prepared folder; downloading needs sign-in.")
+            Outcome(status: customSignInID ? .info : .pass, detail: customSignInID ? "Signing in with the app ID set on this phone (Developer options)." : "Signing in with the built-in Microsoft app ID.")
         }
 
         // ---- Settings

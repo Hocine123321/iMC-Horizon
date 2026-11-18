@@ -6,10 +6,9 @@
 // whether the account owns Minecraft: Java Edition. AccountClient.m does the requests,
 // AccountStore.m keeps the secrets, AccountScreen.m shows it.
 //
-// What this project does NOT have: its own Azure app. The client ID is the owner's to register
-// (docs/IOS_SIGN_IN.md), and until Mojang approves it the last step answers 403. A build with no
-// client ID says so and nothing else is attempted. A build never carries another application's client ID; the
-// private test mode below is the one exception, read from the phone, off by default.
+// This project signs in with the legacy app ID most launchers use (HZDefaultClientID below); it has no Azure
+// app of its own. If the Minecraft services ever refuse that ID the last step answers 403 and the player is told
+// (docs/IOS_SIGN_IN.md).
 //
 // Tokens are never logged, never put in an error and never shown. Everything below that carries one
 // is a plain NSString the caller keeps out of NSLog.
@@ -17,34 +16,23 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-// The build's client ID (Info.plist key HZMicrosoftClientID, filled from the build), or nil when
-// there is none. The environment variable HORIZON_MSA_CLIENT_ID wins, as on desktop; an empty
-// value means none.
-NSString *_Nullable HZMicrosoftClientID(void);
+// The Microsoft app ID sign-in uses. Everybody signs in with the built-in default (the app ID most Minecraft
+// launchers use, the legacy one on login.live.com), so there is nothing to set up. A player can still use another
+// ID: the environment variable HORIZON_MSA_CLIENT_ID, or the file Documents/Horizon/app-id.txt (written from
+// Settings > Developer options; the old test-client-id.txt is read too). See docs/IOS_SIGN_IN.md.
+extern NSString *const HZDefaultClientID;
 
-// TEST MODE, for the owner's own phone only. The environment variable HORIZON_MSA_LEGACY_CLIENT_ID,
-// or the file Documents/Horizon/test-client-id.txt (never filled by a build; written only by the player,
-// from Settings > Developer options or the Files app), names another launcher's app ID to sign in with while
-// Mojang has not approved this project's own. Those IDs are legacy Microsoft apps: they are refused
-// by the v2 endpoint this project uses and work only on login.live.com, with the old scope and a bare
-// Xbox ticket. It is used ONLY when HZMicrosoftClientID() is nil, so a registered ID always wins.
-// Returns nil when it is not set. See docs/IOS_SIGN_IN.md, "Test mode".
-NSString *_Nullable HZLegacyTestClientID(void);
+// The ID the player set on this phone, or nil when there is none (the default is used).
+NSString *_Nullable HZCustomClientID(void);
 
-// Sets (a valid ID) or clears (empty or nil) the test ID kept in Documents/Horizon/test-client-id.txt, for
-// Settings > Developer options, so the player can paste it instead of making the file by hand. YES on success;
-// NO with `problem` set when the text is not an ID or the file cannot be written. Takes effect for the next
-// sign-in. Stored on this phone only, never in a build, never logged. Does not touch the environment variable.
-BOOL HZSetLegacyTestClientID(NSString *_Nullable value, NSString *_Nullable *_Nullable problem);
+// Sets (a valid ID) or clears (empty or nil) the player's own ID. YES on success; NO with `problem` set when the
+// text is not an ID or the file cannot be written. Takes effect for the next sign-in. Kept on this phone only,
+// never in a build, never logged. Does not touch the environment variable.
+BOOL HZSetCustomClientID(NSString *_Nullable value, NSString *_Nullable *_Nullable problem);
 
-// YES when sign-in will run in test mode (no registered ID, a legacy test ID set).
-BOOL HZSignInIsTestMode(void);
+// The ID a request sends: the player's own, else the default. Never nil.
+NSString *HZActiveClientID(void);
 
-// The ID a request should send: the registered one, else the test one, else nil.
-NSString *_Nullable HZActiveClientID(void);
-
-// Said while there is no client ID, in place of a sign-in.
-extern NSString *const HZSignInNotConfigured;
 // Said when the account does not own the game.
 extern NSString *const HZDoesNotOwn;
 // Said when the account owns the game but has no profile yet.

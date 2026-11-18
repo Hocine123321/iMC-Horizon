@@ -130,7 +130,7 @@ If the flag is set but the files fail the check, the launcher opens instead of t
 - Launcher settings for the engine (graphics API, render distance preset). The launcher's own Settings page exists
   (appearance, background colour, Marketplace visibility, start-up); engine settings live inside the game, in
   **Options > Video Settings > iMC** (see `IMC_SETTINGS.md`).
-- A working sign-in (M9 needs the owner's Azure app and Mojang's approval) and preparation of the game files on the
+- A sign-in checked on a phone (M9 is built and uses the default legacy app ID; it has not been run end to end) and preparation of the game files on the
   phone (M8b: the download is written but has never run; the Java preparation is not).
 - Worlds, Screenshots and Logs pages (M12).
 - Going back to the launcher from inside the game (a pause menu entry). Until then, closing the app

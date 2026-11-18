@@ -24,8 +24,7 @@ final class AccountController: ObservableObject {
     private var timer: Timer?
 
     var signedIn: Bool { name != nil }
-    var testMode: Bool { HZSignInIsTestMode() }
-    var configured: Bool { HZActiveClientID() != nil }
+    var customID: Bool { HZCustomClientID() != nil }
 
     init() { refresh() }
 
@@ -265,21 +264,17 @@ struct AccountPage: View {
                 .frame(maxWidth: .infinity, minHeight: 52)
             }
             .primaryAction().tint(brand).controlSize(.large)
-            .disabled(!c.configured || c.phase == .starting)
+            .disabled(c.phase == .starting)
         }
         .padding(22).frame(maxWidth: .infinity)
         .glassCard(cornerRadius: 32, tint: brand.opacity(0.18))
     }
 
-    private var headline: String {
-        if c.testMode { return "Not signed in (test mode)" }
-        return c.configured ? "Not signed in" : "Sign-in is not set up yet"
-    }
+    private var headline: String { "Not signed in" }
     private var subline: String {
-        if c.testMode {
-            return "Test mode: signing in with another launcher's app ID, set on this phone only. It can stop working at any time and is not for sharing. Sign in with the Microsoft account that owns Minecraft: Java Edition."
-        }
-        return c.configured ? "Sign in with the Microsoft account that owns Minecraft: Java Edition." : HZSignInNotConfigured
+        c.customID
+            ? "Sign in with the Microsoft account that owns Minecraft: Java Edition. It uses the app ID you set in Developer options."
+            : "Sign in with the Microsoft account that owns Minecraft: Java Edition."
     }
 
     private var codeCard: some View {

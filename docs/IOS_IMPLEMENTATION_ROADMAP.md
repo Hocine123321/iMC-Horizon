@@ -21,7 +21,7 @@
 | An iPhone 12 and a way to install an unsigned IPA (AltStore, Sideloadly, a personal certificate, or similar) | Device builds. No App Store, TestFlight or paid developer programme is assumed | You |
 | A second device class (a newer or lower-memory iPhone) if available | One device cannot show spread | You |
 | A `.local/horizon-client/26.3` prepared on a PC/Mac | Parity runs and the M3 bootstrap path | You |
-| Your own Azure app registration | Needed from M8; Horizon's cannot be reused | You |
+| Your own Azure app registration | **Dropped 2026-11-17:** sign-in uses the default legacy app ID most launchers use (`docs/IOS_SIGN_IN.md`) | n/a |
 
 ## Milestone overview
 

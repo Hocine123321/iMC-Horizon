@@ -61,7 +61,7 @@ The fixed route from `IOS_IMPLEMENTATION_ROADMAP.md` (M15 step 2): a new world, 
 Open. On the owner's phone `MAP_JIT` was refused twice with a debugger attached; the `allow-jit` entitlement test build exists (2026-11-10) and no result from it is recorded. `IOS_PREPARE_WITHOUT_JIT.md` lists the routes that need no JIT and what each costs; the baseline is still a folder prepared on a computer (`PC_PREPARATION_GUIDE.md`). Download from Mojang is built and CI-compiled and waits for the sign-in below.
 
 ### 5. Sign-in (M9)
-**Decided 2026-11-15:** the test sign-in (another launcher's app ID, the legacy Microsoft endpoints) becomes the real sign-in for everybody, since most Minecraft launchers sign in this way, and the plan of registering the app's own Azure app and waiting for Mojang's approval is dropped. To do: ship a default app ID, remove the "this build's own app ID" path and the "test mode" wording, keep a way to use a different ID in Developer options. Open: which app ID to ship by default.
+**Decided 2026-11-15:** the test sign-in (another launcher's app ID, the legacy Microsoft endpoints) becomes the real sign-in for everybody, since most Minecraft launchers sign in this way, and the plan of registering the app's own Azure app and waiting for Mojang's approval is dropped. **Built 2026-11-17:** the default app ID is `00000000402b5328`; the build's own-ID path and the "test mode" wording are gone; Developer options keeps "Use a different app ID". Not run end to end on a phone: the unknowns are Xbox Live accepting the bare token and the Minecraft services accepting this ID from this app (the Account screen says so on a 403).
 
 ### 6. Launcher pieces that do not exist yet
 Worlds list (size and date) and Screenshots page (with Share and Save to Photos) (M12); folder import and quick links in the file manager (M13); checking signed Marketplace projects and revoked installed ones (M14). World backup and export, signature and update checks stay removed.
@@ -72,7 +72,7 @@ Haptics in the game and an accessibility pass (M19: bigger text, a one-handed la
 ## What the owner needs to do
 - Install the newest build (it is the first with the engine on upstream 2832168 and with Quit Game back to the launcher) and say whether touch, the launcher and Play-then-Quit work as before; then run the five-cycle test from item 2.
 - Say whether the entitlement test build (item 4) could run the probes: Settings > Diagnostics > Tools > "Run the JIT probes on the next start".
-- Say which app ID the sign-in should ship with (item 5).
+- Try Account > Sign in on a phone and say what the screen shows (item 5).
 
 ## Reference
 Roadmap: `IOS_IMPLEMENTATION_ROADMAP.md` (milestone table and dated progress notes). Decisions: `IOS_DECISIONS_AND_APP_VISION.md`. What the launcher does: `LAUNCHER.md`. Where code lives: `CODE_MAP.md`. What changed under `horizon/`: `HORIZON_CHANGES.md`. What happened and why: `SESSION_LOG.md`. Fork findings: the `heyskylo/horizon-ios` repo (MIT; keep its copyright notice if code is copied).
