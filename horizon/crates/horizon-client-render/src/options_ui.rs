@@ -7647,13 +7647,14 @@ mod tests {
     }
 
     #[test]
-    fn imc_settings_are_a_page_of_the_video_screen_not_of_horizon_settings() {
+    fn imc_settings_are_rows_of_the_imc_or_the_touch_page_not_of_horizon_settings() {
         use crate::graphics_ui::{Item as G, Page as GP, rows};
         use horizon_client_input::imc_settings::Item;
-        // Every iMC setting is a row of the Video screen's iMC page, exactly once.
+        // Every iMC setting is a row of the iMC page (graphics side, Video Settings) or of the touch page
+        // (Controls > Touch Controls), exactly once between them.
         let on_page: Vec<_> = rows()
             .into_iter()
-            .filter(|(p, _)| *p == GP::Imc)
+            .filter(|(p, _)| matches!(*p, GP::Imc | GP::Touch))
             .flat_map(|(_, groups)| groups)
             .flat_map(|(_, rows)| rows)
             .map(|r| r.item)
@@ -7684,6 +7685,55 @@ mod tests {
         assert_ne!(s.imc, before);
         s.imc.reset();
         assert_eq!(s.imc, before);
+    }
+
+    #[test]
+    fn the_controls_page_opens_the_touch_settings_on_their_own() {
+        use crate::graphics_ui::{Item as G, Page as GP};
+        use crate::settings_shell::Screen;
+        use horizon_client_input::imc_settings::Item;
+        let s = Settings::default();
+        let mut ui = OptionsUi::default();
+        ui.show(Page::Controls);
+        assert!(
+            ui.layout(&s, 427.0, 240.0).0.iter().any(|w| matches!(
+                &w.kind,
+                WKind::Button {
+                    act: Act::Push(Page::ControlsTouch),
+                    ..
+                }
+            )),
+            "Controls has a Touch Controls button"
+        );
+        // Opened from Controls, the screen is the touch page alone: a touch setting is there, an Auto Performance
+        // one is not, and it is not a video screen.
+        ui.show(Page::ControlsTouch);
+        assert!(!ui.video_open());
+        let pages = |ui: &OptionsUi| -> Vec<GP> {
+            ui.graphics.screen.sheets(&s).iter().map(|sheet| sheet.id).collect()
+        };
+        assert_eq!(pages(&ui), vec![GP::Touch]);
+        let rows_of = |ui: &OptionsUi| -> Vec<G> {
+            ui.graphics
+                .screen
+                .sheets(&s)
+                .iter()
+                .flat_map(|sheet| sheet.groups.iter())
+                .flat_map(|group| group.rows.iter().map(|r| r.id))
+                .collect()
+        };
+        assert!(rows_of(&ui).contains(&G::Imc(Item::LookSpeed)));
+        assert!(!rows_of(&ui).contains(&G::Imc(Item::AutoPerformance)));
+        // Opened from Video Settings, the same screen has its tabs and no touch page.
+        ui.show(Page::GraphicsImc);
+        assert!(ui.video_open());
+        assert!(!pages(&ui).contains(&GP::Touch));
+        assert!(pages(&ui).contains(&GP::Imc));
+        assert!(rows_of(&ui).contains(&G::Imc(Item::AutoPerformance)));
+        assert!(!rows_of(&ui).contains(&G::Imc(Item::LookSpeed)));
+        // Back to the Controls side, the flag follows.
+        ui.show(Page::ControlsTouch);
+        assert_eq!(pages(&ui), vec![GP::Touch]);
     }
 
     #[test]

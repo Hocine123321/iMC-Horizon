@@ -51,6 +51,7 @@
 | M20 | **Reliability and diagnostics**: clean exit, crash recovery, in-app bug report | **Partial:** crash reporter, a Diagnostics check-up (about thirty checks, advice, shareable report) and a log viewer with a plain-language crash reading exist. Clean exit, a one-zip bug-report bundle and forced-failure tests remain open. | Device | no | medium |
 | M22 | **Test and release pipeline**: on-device test route, regression numbers in CI, signed-IPA guide | Partial: CI build, stack-budget, shell and alternate-icon checks exist and every build shows its version in About; Objective-C rule tests in CI, a fixed device route and the install guide remain open. | Mac+device | no | medium |
 | M24 | **Launcher v2**: SwiftUI, system Liquid Glass and tab bar, portrait, Play/Quit in one process | **Partial:** Xcode 26 CI and the SwiftUI launcher are done and in use; Play without closing the app works behind a Developer-options switch (phone-tested 2026-11-11, idle-engine fix 2026-11-13); **Quit Game back to the launcher was built 2026-11-15** (`App::Idle`; CI-compiled, not run on a phone) **and the five-cycle memory test is not done.** | Device | `horizon/` edit (approved) | large |
+| M25 | **Optimizing game performance** (top priority, owner 2026-11-17): the one plan for smoothness, memory, heat and battery; it takes over M6, M7, M15 steps 2 and 3, and M17 | **Started 2026-11-17.** Phase 0 built: the engine's frame times (rate, average, worst, slow frames) are in the session log and `tools/perf_summary.py` summarizes a run. Phase 1 (the three-run baseline on the phone) is next. Full plan: `IOS_PERFORMANCE_PLAN.md`. | Device | no | large |
 
 The table is the current status snapshot, not a claim that code has been exercised on a phone: see each dated progress note for evidence and remaining acceptance tests. `IOS_DECISIONS_AND_APP_VISION.md` preserves owner decisions and historical status (last corrected 2026-11-10); use `NEXT_STEPS.md` for the active execution order and `CODE_MAP.md` to locate code.
 
@@ -708,6 +709,19 @@ These come after M15. They were chosen because each one removes a real risk or a
 - **iCloud sync of worlds**: tempting, but iCloud Drive is not reachable from a sideloaded app signed with a free certificate, and sync conflicts can destroy worlds.
 - **A custom render backend or shaders for Metal**: the engine already renders through wgpu on Metal; changing that is a research project, not a milestone.
 - **App Store distribution**: ruled out in the decisions doc.
+
+---
+
+## M25. Optimizing game performance (started 2026-11-17)
+
+The most important work for an iPhone Minecraft port (owner). One plan, in `IOS_PERFORMANCE_PLAN.md`: what performance means (smooth, stays alive, stays cool,
+light on the battery), the rules (no change without a before and after, one change at a time, chosen by the platform, pixels and parity stay), the
+levers that already exist, the instrument built on 2026-11-17 (the engine's frame times in `session-log.csv`, `tools/perf_summary.py`), the fixed route
+for the baseline (three runs), how to read the baseline to find the bottleneck, the order of tunings, and how to keep the numbers from getting worse.
+M6 (benchmark baseline), M7 (memory and thermal tuning), M15 steps 2 and 3 and M17 (frame pacing, battery modes) are now steps of this plan, and their
+text above is the detail it draws on.
+
+**Next:** the owner plays five minutes on the newest build and shares the session log (a first look); then the baseline route.
 
 ---
 
