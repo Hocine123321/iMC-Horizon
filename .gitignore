@@ -7,3 +7,4 @@ DerivedData/
 # Never commit game files (see horizon/CLAUDE.md)
 .local/
 *.jar
+fabric-layer/target/
