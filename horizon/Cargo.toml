@@ -11,7 +11,8 @@ members = [
     "crates/horizon-game",
     "crates/horizon-official",
     "crates/horizon-heartbeat",
-
+    # The iOS app's static library (platform/ios-bridge): one C entry point into horizon-client.
+    "platform/ios-bridge",
     "crates/horizon-core",
     "crates/horizon-platform",
     "crates/horizon-addresses",

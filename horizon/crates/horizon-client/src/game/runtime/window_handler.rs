@@ -337,6 +337,8 @@ impl Game<'_> {
         if self.pending_save.is_some() {
             return;
         }
+        self.touch_frame(event_loop);
+        self.auto_performance_frame();
         horizon_client::spans::time("pads", || self.poll_pads(event_loop));
         self.settle_after_run(event_loop);
         self.pause_if_inactive();
@@ -382,6 +384,14 @@ impl Game<'_> {
 }
 
 impl ApplicationHandler for Game<'_> {
+    fn suspended(&mut self, event_loop: &ActiveEventLoop) {
+        self.app_suspended(event_loop);
+    }
+
+    fn memory_warning(&mut self, _event_loop: &ActiveEventLoop) {
+        self.app_memory_warning();
+    }
+
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_some() {
             return;
@@ -405,9 +415,14 @@ impl ApplicationHandler for Game<'_> {
         self.unclaimed_window = agent_started && !self.options.offscreen;
         // `--offscreen` renders into a texture: its window would only show white.
         let window_step = startup::step("window.create");
+        let attributes = match horizon_client::window::creation_size(
+            winit::dpi::LogicalSize::new(size[0], size[1]),
+        ) {
+            Some(size) => attributes.with_inner_size(size),
+            None => attributes,
+        };
         let window = match event_loop.create_window(
             attributes
-                .with_inner_size(winit::dpi::LogicalSize::new(size[0], size[1]))
                 .with_fullscreen(fullscreen.then_some(winit::window::Fullscreen::Borderless(None)))
                 .with_visible(!self.options.offscreen)
                 .with_active(!agent_started),

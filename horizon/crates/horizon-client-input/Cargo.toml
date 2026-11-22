@@ -15,11 +15,15 @@ winit = "0.30.13"
 log = "0.4"
 png = "0.18"
 [target.'cfg(not(target_os = "android"))'.dependencies]
-arboard = { version = "3.6.1", default-features = false, features = ["wayland-data-control"] }
+arboard = { version = "3.6.1", default-features = false }
 
 [dev-dependencies]
 # The window icon test decodes Horizon's icon.
 horizon-theme = { path = "../horizon-theme" }
+
+# Wayland's clipboard protocol exists only where Wayland does; its crates do not build for iOS.
+[target.'cfg(all(unix, not(target_vendor = "apple"), not(target_os = "android")))'.dependencies]
+arboard = { version = "3.6.1", default-features = false, features = ["wayland-data-control"] }
 
 [features]
 controllers = []

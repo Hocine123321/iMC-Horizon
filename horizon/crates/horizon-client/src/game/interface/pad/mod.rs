@@ -56,6 +56,10 @@ pub(super) struct Pads {
     devices: hardware::Devices,
     /// The virtual pad of `horizon-ctl pad`.
     injected: PadState,
+    /// What the fingers on a touch screen hold (`game/touch.rs`). Kept apart from `injected` so
+    /// that touch plays the game without making the pad "in use": the controller guide, the
+    /// button glyphs and the menus' controller focus are for a controller, not for a finger.
+    touched: PadState,
     /// The virtual pad was in use at the last poll.
     virtual_input: bool,
     /// Buttons a `pad ... tap` releases at the next poll.
@@ -284,7 +288,11 @@ impl Pads {
 
     /// A replay's pad button, in place of `pad`'s line.
     pub(super) fn inject_button(&mut self, button: Button, down: bool) {
-        self.injected.set(button, down);
+        self.touched.set_pressed(button, down);
+    }
+    /// Touch's steering stick, on the virtual controller's left stick.
+    pub(super) fn set_injected_left(&mut self, stick: [f32; 2]) {
+        self.touched.left = stick;
     }
     /// Splitscreen: this player's pad state, from `source`. Another pad, or
     /// none: the old one's A going away isn't a release.
@@ -320,6 +328,7 @@ impl Pads {
         self.radial.cancel();
         self.menu.stop_craft();
         self.injected = PadState::default();
+        self.touched = PadState::default();
     }
 
     /// Whether a held button's press went to `action`, including releases delayed until the next
@@ -376,7 +385,8 @@ impl Game<'_> {
 
     /// Once per loop iteration: read the pads and act on button changes.
     pub(super) fn poll_pads(&mut self, event_loop: &dyn EventLoopCtl) {
-        self.pad.virtual_input = self.pad.injected != PadState::default();
+        self.pad.virtual_input = self.pad.injected != PadState::default()
+            || self.pad.touched != PadState::default();
         let context = self.pad_context();
         if let Some(old) = self.pad.context.filter(|old| *old != context) {
             if old.screen != context.screen {
@@ -431,8 +441,10 @@ impl Game<'_> {
         }
         self.ui.options.pad_glyphs = Glyphs::of(&self.settings.controller, self.pad.style);
         self.ui.options.pad_driving = self.pad.in_use && self.pad_focus_mode();
-        let mut state = hardware.merge(&self.pad.injected);
+        let state = hardware.merge(&self.pad.injected);
+        // A finger is not a controller: only a pad, or a script's, makes the pad "in use".
         let activity = self.pad.activity.observe(&state, &self.settings.controller);
+        let mut state = state.merge(&self.pad.touched);
         for (i, (stick, deadzone)) in [
             (&mut state.left, self.settings.controller.move_deadzone),
             (&mut state.right, self.settings.controller.look_deadzone),
@@ -522,7 +534,7 @@ impl Game<'_> {
     }
 
     /// End held actions and captures before another context receives input.
-    fn pad_cancel_inputs(&mut self, event_loop: &dyn EventLoopCtl) {
+    pub(super) fn pad_cancel_inputs(&mut self, event_loop: &dyn EventLoopCtl) {
         // Before the releases below: a cancelled press must not click, a cancelled trigger
         // change the recipe book's category as it comes up, nor a cancelled radial menu
         // commit when its opener comes up.

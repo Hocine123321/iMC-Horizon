@@ -26,6 +26,8 @@ impl Game<'_> {
         match action {
             // A splitscreen player's title never ends the process (P1's does).
             Action::Quit if self.options.split_guest => {}
+            // iOS in-process Play (off unless the shell allows it): see startup_menu.rs.
+            Action::Quit if horizon_client_input::ios_hold::request_quit() => {}
             Action::Quit => {
                 self.begin_closing_save(true)?;
                 event_loop.set_control_flow(ControlFlow::Poll);

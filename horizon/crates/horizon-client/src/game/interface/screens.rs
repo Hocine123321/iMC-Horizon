@@ -85,7 +85,8 @@ impl Screen {
             | Self::CommandBlock
             | Self::BlockEditor
             | Self::DebugOptions
-            | Self::HudEditor => true,
+            | Self::HudEditor
+            | Self::TouchEditor => true,
         }
     }
     /// `Screen.isAllowedInPortal`: `LocalPlayer.handlePortalTransitionEffect`
@@ -121,7 +122,9 @@ impl Screen {
             | Self::Mod
             // The HUD editor shows the HUD it moves.
             | Self::HudEditor
-            | Self::Studio | Self::EmoteWheel => false,
+            | Self::Studio
+            | Self::EmoteWheel
+            | Self::TouchEditor => false,
             // WinScreen.extractBackground: the poem fills the screen with the End portal, the
             // credits alone blur. Game::menu_blur knows which one rolls.
             Self::Win => false,

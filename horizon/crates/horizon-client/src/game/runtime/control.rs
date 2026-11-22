@@ -1194,6 +1194,8 @@ impl Game<'_> {
                     "graphics" => Page::Graphics,
                     "graphics-advanced" => Page::GraphicsAdvanced,
                     "graphics-hdr" => Page::GraphicsHdr,
+                    "graphics-imc" => Page::GraphicsImc,
+                    "controls-touch" => Page::ControlsTouch,
                     "extras" => Page::Extras,
                     "pvp" => Page::Pvp,
                     "credits" => Page::Credits,
@@ -1460,6 +1462,7 @@ impl Game<'_> {
             Screen::DebugOptions => "debug-options",
             Screen::Mod => "mod",
             Screen::HudEditor => "hud-editor",
+            Screen::TouchEditor => "touch-editor",
             Screen::Studio => "studio",
             Screen::EmoteWheel => "emote-wheel",
         }

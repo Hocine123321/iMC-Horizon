@@ -120,7 +120,7 @@ use loading_window::{
 };
 use resource_loader::{
     EntityModels, GameCpuResources, Loaded, LoaderMsg, PendingWorldEntry, WorldRestLoader,
-    run_loading, write_report,
+    loading_app, run_loading, write_report,
 };
 use window_handler::ClientQuit;
 // `Action` here is the title screen's buttons (`title::Action`).
@@ -267,6 +267,8 @@ enum Screen {
     Mod,
     /// PvP & HUD's widget editor (game/interface/hud_editor.rs).
     HudEditor,
+    /// iMC Settings' touch controls editor (game/touch_editor.rs).
+    TouchEditor,
     /// Horizon Studio script screen (`studio_screen_open`): canvas draws
     /// itself, takes input through the screen hooks, does not draw chat.
     Studio,
@@ -300,6 +302,7 @@ impl Screen {
             Screen::DebugOptions => "debug_options",
             Screen::Mod => "mod",
             Screen::HudEditor => "hud_editor",
+            Screen::TouchEditor => "touch_editor",
             Screen::Studio => "studio",
         }
     }
@@ -1116,6 +1119,10 @@ struct Game<'a> {
     focus_after_run: Option<bool>,
     /// Whether the window currently accepts input method events.
     ime_allowed: bool,
+    /// Touch's Back put the phone's keyboard away while a text box still has the focus.
+    ime_hidden: bool,
+    /// The touch controls editor, while it is open (`game/touch_editor.rs`).
+    touch_editor: Option<touch_editor::TouchEditor>,
     /// The candidate window's area last given to the window, in pixels.
     ime_area: Option<[i32; 4]>,
     /// When the window lost focus, while it is still without
@@ -1400,6 +1407,14 @@ struct Game<'a> {
     /// `MinecraftServer.ticksUntilAutosave`: the ticks left before the next
     /// autosave, counted down a tick at a time.
     ticks_until_autosave: i64,
+    /// Fingers on a touch screen (the phone): see `game/touch.rs`.
+    touch: touch::TouchState,
+    /// Cursor mode (`game/touch_cursor.rs`): the finger moves a drawn pointer like a trackpad.
+    cursor_mode: touch_cursor::CursorState,
+    /// When the app last saved because it went inactive (`game/lifecycle.rs`).
+    last_suspend_save: Option<Instant>,
+    /// Auto Performance: the memory watcher and the caps it sets (`game/auto_performance.rs`).
+    auto_performance: auto_performance::AutoPerformance,
     applied_modifiers: Vec<(String, String)>,
     experience: Experience,
     orbs: horizon_client::join_seq::JoinList<ExperienceOrb>,
@@ -4659,6 +4674,7 @@ impl Game<'_> {
         self.frame_graph
             .draw(self.settings.horizon.overlay, &mut batch, &self.gui.atlas);
         self.draw_pad_over_hud(&mut batch);
+        self.draw_touch_controls(&mut batch);
         batch
     }
     fn hud_layers(&mut self, size: [u32; 2]) -> HudBatch {
@@ -5104,6 +5120,7 @@ impl Game<'_> {
             Screen::BlockEditor => self.draw_block_editor(&mut batch),
             Screen::DebugOptions => self.draw_debug_options(&mut batch),
             Screen::HudEditor => self.draw_hud_editor(&mut batch),
+            Screen::TouchEditor => self.draw_touch_editor(&mut batch),
             Screen::Studio => {
                 self.draw_screen_phase(
                     &mut batch,
@@ -8814,6 +8831,11 @@ impl Game<'_> {
     /// it a handler both can call and a `gamepad::Route` (screenshot and fullscreen do this). A
     /// screen's own raw keys, text and mods' key hooks stay raw on purpose.
     fn handle_window_event_inner(&mut self, event_loop: &dyn EventLoopCtl, mut event: WindowEvent) {
+        // A finger on a phone's screen: its own handler turns it into the inputs below.
+        if let WindowEvent::Touch(touch) = &event {
+            self.touch_event(event_loop, touch);
+            return;
+        }
         let pressed = match &event {
             WindowEvent::KeyboardInput { event, .. } => {
                 event.state == ElementState::Pressed && !event.repeat
@@ -9307,6 +9329,9 @@ impl Game<'_> {
                         if self.screen == Screen::HudEditor {
                             self.hud_editor_drag();
                         }
+                        if self.screen == Screen::TouchEditor {
+                            self.touch_editor_drag();
+                        }
                         if self.screen == Screen::WorldOptions {
                             self.world_options_drag();
                         }
@@ -9726,6 +9751,12 @@ impl Game<'_> {
                         Screen::HudEditor if button == MouseButton::Left => {
                             self.hud_editor_release()
                         }
+                        Screen::TouchEditor if pressed && button == MouseButton::Left => {
+                            self.touch_editor_press()
+                        }
+                        Screen::TouchEditor if button == MouseButton::Left => {
+                            self.touch_editor_release()
+                        }
                         Screen::ConfirmLink if pressed && button == MouseButton::Left => {
                             self.confirm_link_click()
                         }
@@ -9828,6 +9859,16 @@ impl Game<'_> {
                         } else {
                             self.keys.remove(&key);
                         }
+                    } else if event.state == ElementState::Pressed {
+                        // A key with no physical code (a hardware keyboard on iOS can send one).
+                        // Enter and the editing keys are recovered in `follow_named_keymap`; this
+                        // is for anything else, so a test on a phone shows what arrived.
+                        log::info!(
+                            "Horizon: chat key with no physical code: logical {:?}, text {:?}",
+                            event.logical_key,
+                            event.text
+                        );
+                        self.chat_unplaced_key(event.text.as_deref());
                     }
                 }
                 WindowEvent::KeyboardInput { event, .. } if self.sign_edit.is_some() => {
@@ -10197,11 +10238,16 @@ impl Game<'_> {
                     }
                     if let Some(server) = &self.integrated {
                         server.set_paused(self.pause);
-                        server.set_distances(
-                            self.settings.render_distance,
-                            self.settings.simulation_distance,
-                            self.settings.entity_distance,
-                        );
+                        // Auto Performance's cap reaches the server too: in single player its
+                        // own copy of every loaded column is a large part of the memory. The
+                        // window's saved settings are not changed.
+                        let render = self.capped_render_distance();
+                        let simulation = if self.auto_performance.caps.render_distance.is_some() {
+                            self.settings.simulation_distance.min(render)
+                        } else {
+                            self.settings.simulation_distance
+                        };
+                        server.set_distances(render, simulation, self.settings.entity_distance);
                         server.set_legacy_rules(self.settings.extras.pvp.combat.rules);
                     }
                     self.clock.end_frame(self.pause);
@@ -10260,6 +10306,8 @@ impl Game<'_> {
                             self.record_frame_allocs();
                         }
                         self.debug_charts.frame_times.log(elapsed.as_nanos() as i64);
+                        // iMC: the iOS app's session log counts frames and their times (`frame_probe`).
+                        horizon_client_input::frame_probe::record(elapsed.as_nanos() as u64);
                         if self.frames == 0 {
                             // The launcher times Play to this line (launcher/src/perf.rs).
                             log::info!(
@@ -10369,6 +10417,24 @@ impl<'a> Game<'a> {
         audio: Audio,
         prepared: Option<GameCpuResources>,
     ) -> Result<Self> {
+        Ok(*Self::new_boxed(
+            res, pack, gui, options, settings, audio, prepared,
+        )?)
+    }
+
+    /// `new`, with the `Game` on the heap from the start. `Game` is large and `new` is deep in the
+    /// event loop on an iOS main thread (1 MB): a `Game` returned by value is held by every caller
+    /// on the way up, each in a frame of its own (docs/IOS_CRASH_STACK.md).
+    #[inline(never)]
+    fn new_boxed(
+        res: &'a Arc<Resources>,
+        pack: PackResources,
+        gui: UiResources,
+        options: Options,
+        settings: Settings,
+        audio: Audio,
+        prepared: Option<GameCpuResources>,
+    ) -> Result<Box<Self>> {
         let phase = match Self::mod_phase_for_construction() {
             mod_api::__private::ModPhase::Packages if cfg!(test) => {
                 mod_api::__private::ModPhase::World
@@ -10425,7 +10491,7 @@ impl<'a> Game<'a> {
             &gui.atlas.translucent,
         );
         let resource_source = pack.source.clone();
-        let mut game = Game {
+        let mut game = Box::new(Game {
             structure_spawns: horizon_client::mobs::spawn_selection::StructureSpawns::load(
                 &options.resources,
             ),
@@ -10530,6 +10596,8 @@ impl<'a> Game<'a> {
             unclaimed_modifiers: None,
             focus_after_run: None,
             ime_allowed: false,
+            ime_hidden: false,
+            touch_editor: None,
             ime_area: None,
             focus_lost: None,
             modifiers: winit::keyboard::ModifiersState::empty(),
@@ -10683,6 +10751,10 @@ impl<'a> Game<'a> {
             autosaving: false,
             // `computeNextAutosaveInterval` at the clock's 20 ticks a second.
             ticks_until_autosave: 6000,
+            touch: Default::default(),
+            cursor_mode: Default::default(),
+            last_suspend_save: None,
+            auto_performance: Default::default(),
             applied_modifiers: Vec::new(),
             experience: Experience::default(),
             orbs: Default::default(),
@@ -11028,7 +11100,7 @@ impl<'a> Game<'a> {
             requested_camera_type: Default::default(),
             fangs: Default::default(),
             player_model: None,
-        };
+        });
         game.reset_entity_residency();
         Ok(game)
     }
@@ -11128,7 +11200,12 @@ pub(crate) fn run_with(
     horizon_world::datafix::set_resources(
         &std::path::absolute(&vanilla_root).unwrap_or_else(|_| vanilla_root.clone()),
     );
-    if let Some(error) = missing_resources(&vanilla_root, horizon_hooks::engine::get_the_game()) {
+    // iMC (iOS): with the hold armed the app starts the engine before Play, and the launcher on top has
+    // already checked the files (it only lets Play through when they are usable), so a missing folder is
+    // not an error yet: the loader fails with its own message if it still is when Play is pressed.
+    if let Some(error) = missing_resources(&vanilla_root, horizon_hooks::engine::get_the_game())
+        .filter(|_| !horizon_client_input::ios_hold::armed())
+    {
         // The game build started by hand (the release's zip), not by the
         // launcher: a window says where to get it. Scripts and servers get
         // the error.
@@ -11231,6 +11308,21 @@ pub(crate) fn run_with(
     if !synchronous_startup(&options) {
         return run_loading(options, early_settings, vanilla_root, None, started);
     }
+    run_synchronous(options, early_settings, vanilla_root, started)
+}
+
+/// The rest of `run_with` for a start that does not show the loading window: a script, a benchmark,
+/// a harness or a server. Its own function and never inlined: its locals are hundreds of kilobytes,
+/// and `run_with` stays on the stack for the whole run. On iOS the main thread has 1 MB, and the
+/// loading window runs under `run_with`, so these must not count against it
+/// (docs/IOS_CRASH_STACK.md).
+#[inline(never)]
+fn run_synchronous(
+    mut options: Options,
+    early_settings: Settings,
+    vanilla_root: PathBuf,
+    started: Instant,
+) -> Result<()> {
     let mut pack_error = None;
     let selected_root = packs::startup_root(
         &vanilla_root,
@@ -11287,7 +11379,7 @@ pub(crate) fn run_with(
             );
             game.settings.save(&Game::options_path());
         }
-        run_event_loop(game)?;
+        run_event_loop(*game)?;
     }
     Ok(())
 }

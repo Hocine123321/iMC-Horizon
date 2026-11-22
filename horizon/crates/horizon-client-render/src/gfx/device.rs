@@ -84,7 +84,7 @@ impl wgpu::rwh::HasDisplayHandle for WindowDisplay {
 /// OpenGL. Each is tried when the one before has no surface, adapter or device. A native
 /// crash in the driver can't be caught in the game; the launcher switches the setting to
 /// DirectX 12 after one at the renderer's start on Vulkan (#746) or, on Windows, OpenGL
-/// (#18291). macOS has Metal only.
+/// (#18291). macOS and iOS have Metal only.
 pub(crate) fn backend_order(
     api: GraphicsApi,
     os: &str,
@@ -92,7 +92,9 @@ pub(crate) fn backend_order(
     wgpu_backend: bool,
 ) -> Vec<wgpu::Backends> {
     use wgpu::Backends;
-    if os == "macos" || wgpu_backend {
+    // `os` is a run-time string, so iOS needs naming here: left to the arms below it would be asked
+    // for Vulkan and OpenGL, neither of which is built for it, and no backend would be tried.
+    if os == "macos" || os == "ios" || wgpu_backend {
         return vec![Backends::default()];
     }
     let windows = os == "windows";
@@ -705,9 +707,9 @@ async fn open_dxc(
 const NO_GPU_DRIVER: &str = "No graphics driver with Vulkan, DirectX 12 or OpenGL found: Horizon needs \
      a GPU driver with one of them. Install the latest driver for your NVIDIA, AMD or Intel GPU and \
      start the game again";
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 const NO_GPU_DRIVER: &str = "No Metal graphics device found";
-#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+#[cfg(not(any(target_os = "windows", target_vendor = "apple")))]
 const NO_GPU_DRIVER: &str = "No Vulkan or OpenGL graphics driver found: Horizon needs the Vulkan loader \
      (libvulkan.so.1) and a Vulkan driver for your GPU (Mesa's, or NVIDIA's), or OpenGL through EGL";
 #[cfg(test)]

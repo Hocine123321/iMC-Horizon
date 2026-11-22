@@ -1510,6 +1510,12 @@ pub enum Page {
     Graphics,
     GraphicsAdvanced,
     GraphicsHdr,
+    /// The graphics screen at its iMC page: the iOS app's own graphics-side settings (`imc_settings`):
+    /// Auto Performance, the phone preset and the settings greying.
+    GraphicsImc,
+    /// Controls > Touch Controls: the iOS app's touch settings (`imc_settings`), the same settings
+    /// screen as the graphics one opened on its Touch page alone (`GraphicsScreen::touch_view`).
+    ControlsTouch,
     /// HDR calibration, full screen (`calibration`).
     HdrCalibration,
     /// Horizon's controller settings and button binds.
@@ -1528,6 +1534,8 @@ pub enum Page {
     /// Horizon Settings: every page Horizon adds, as a mod's settings
     /// screen hangs off vanilla's Options.
     Horizon,
+    /// iMC Settings' extra on-screen buttons (`touch_extras`): Chat, F3, F2, View and two keys.
+    TouchButtons,
     /// Replay Studio: saved recordings browser and 3D video editor launcher.
     Studio,
     /// AI Agent: agent control on or off, whether an agent is connected, the connection details.
@@ -1558,6 +1566,10 @@ pub(crate) enum Act {
     PvpPreset,
     /// PvP & HUD's Edit HUD button.
     HudEditor,
+    /// The extra buttons page: switch one on or off.
+    TouchExtra(horizon_client_input::touch_extras::Extra),
+    /// The extra buttons page: step Key 1 or Key 2 to the next key.
+    TouchExtraKey(horizon_client_input::touch_extras::Extra),
     /// A native mod's key (mod, key) waits for a key; a button of its page.
     /// A key a native mod registered (mod, mapping) waits for a key, or is reset.
     ModKey(usize, usize),
@@ -1733,6 +1745,10 @@ pub enum Event {
     Credits,
     /// PvP & HUD's Edit HUD: open the HUD editor over the game.
     HudEditor,
+    /// iMC Settings' Edit touch controls: open the touch controls editor over the game.
+    TouchEditor,
+    /// iMC Settings' Calibrate touch: five targets to tap, from which the touch is corrected.
+    TouchCalibrate,
     /// Copy how an agent connects (the AI Agent page).
     CopyAgentDetails,
     /// The AI Agent page's recording button: start or stop.
@@ -1864,6 +1880,8 @@ pub struct OptionsUi {
     pub studio: crate::studio_ui::StudioUi,
     /// The AI Agent page's status lines (set by the game while it shows).
     pub agent_status: Vec<String>,
+    /// iMC Settings' Auto Performance line: what it holds back right now (set by the game).
+    pub perf_status: Option<String>,
     /// A repro recording is running: the AI Agent page's button says stop.
     pub agent_recording: bool,
     /// The Music page's groups (set by the game when it opens the page).
@@ -1960,6 +1978,7 @@ impl Default for OptionsUi {
             split_setup: Default::default(),
             studio: Default::default(),
             agent_status: Vec::new(),
+            perf_status: None,
             agent_recording: false,
             music_groups: Vec::new(),
             focus: None,
@@ -1975,6 +1994,42 @@ impl Default for OptionsUi {
             #[cfg(test)]
             layouts_built: 0,
         }
+    }
+}
+/// Greys out a widget whose setting means nothing on an iPhone (`ios_unused`). A slider becomes
+/// the same inactive button `option_widget` makes for an unavailable option, which cannot be
+/// dragged; a tick box or page button just goes inactive.
+fn grey_unused(s: &Settings, w: &mut Widget) {
+    if unused_reason(s, w).is_none() {
+        return;
+    }
+    if let WKind::Slider { opt, .. } = &w.kind {
+        let opt = *opt;
+        w.kind = WKind::Button {
+            label: opt.label(s),
+            active: false,
+            act: Act::Cycle(opt),
+        };
+    } else if let WKind::Button { active, .. } = &mut w.kind {
+        *active = false;
+    }
+}
+/// The reason a widget is greyed out by iMC Settings, for its tooltip.
+fn unused_reason(s: &Settings, wd: &Widget) -> Option<&'static str> {
+    if !s.imc.grey_unused {
+        return None;
+    }
+    match &wd.kind {
+        WKind::Button { act, .. } => match act {
+            Act::Cycle(opt) => crate::ios_unused::opt(*opt),
+            Act::Extra(item) => crate::ios_unused::extra(*item),
+            Act::Push(page) => crate::ios_unused::page(*page),
+            // Every key of the Key Binds page, and its resets.
+            Act::Key(_) | Act::ResetKey(_) | Act::ResetKeys => Some(crate::ios_unused::KEYBOARD),
+            _ => None,
+        },
+        WKind::Slider { opt, .. } => crate::ios_unused::opt(*opt),
+        _ => None,
     }
 }
 fn option_widget(s: &Settings, opt: Opt, x: f32, y: f32, w: f32) -> Widget {
@@ -2051,6 +2106,10 @@ enum Row {
 /// A widget's tooltip (`setTooltip`), unwrapped: drawn while hovered, and
 /// its narration's hint.
 fn tooltip_text(s: &Settings, wd: &Widget) -> Option<Text> {
+    // A setting iMC Settings greyed out says why, in place of what it would have said.
+    if let Some(reason) = unused_reason(s, wd) {
+        return Some(Text::literal(reason.to_owned()));
+    }
     let WKind::Button { act, .. } = &wd.kind else {
         let WKind::Slider { opt, .. } = &wd.kind else {
             return None;
@@ -2076,6 +2135,8 @@ fn tooltip_text(s: &Settings, wd: &Widget) -> Option<Text> {
         Act::Push(Page::Accessibility) => Some("options.accessibility.tooltip".into()),
         Act::PvpPreset => Some("horizon.pvp.preset.tooltip".into()),
         Act::HudEditor => Some("horizon.pvp.editor.tooltip".into()),
+        Act::TouchExtra(e) => Some(format!("horizon.imc.extra.{}.tooltip", e.name()).into()),
+        Act::TouchExtraKey(_) => Some("horizon.imc.extra.key.tooltip".into()),
         _ => None,
     };
     if let Some(key) = key.filter(|key| lang::has(key)) {
@@ -2437,6 +2498,8 @@ impl OptionsUi {
             self.shader.show(at);
         }
         if let Some(at) = Self::graphics_page(page) {
+            // One screen, two ways in: the Controls page's touch settings, or Video Settings.
+            self.graphics.screen.touch_view = page == Page::ControlsTouch;
             self.graphics.show(at);
         }
         if let Some(at) = Self::controller_page(page) {
@@ -2460,7 +2523,8 @@ impl OptionsUi {
     /// Whether a video settings screen is open, Horizon's or vanilla's: the fullscreen mode
     /// waits for it to close, and Ctrl with the wheel steps the GUI scale.
     pub fn video_open(&self) -> bool {
-        self.page() == Page::Video || Self::graphics_page(self.page()).is_some()
+        self.page() == Page::Video
+            || (self.page() != Page::ControlsTouch && Self::graphics_page(self.page()).is_some())
     }
     /// Where the graphics screen opens for `page`, if it is one of its pages.
     fn graphics_page(page: Page) -> Option<crate::graphics_ui::Page> {
@@ -2468,6 +2532,8 @@ impl OptionsUi {
             Page::Graphics => Some(crate::graphics_ui::Page::General),
             Page::GraphicsAdvanced => Some(crate::graphics_ui::Page::Advanced),
             Page::GraphicsHdr => Some(crate::graphics_ui::Page::Hdr),
+            Page::GraphicsImc => Some(crate::graphics_ui::Page::Imc),
+            Page::ControlsTouch => Some(crate::graphics_ui::Page::Touch),
             _ => None,
         }
     }
@@ -2494,15 +2560,19 @@ impl OptionsUi {
             Page::ShaderPacks => "horizon.pages.shader_packs",
             Page::ShaderOptions => "horizon.pages.shader_options",
             Page::PackOptions => "horizon.pack.options.title",
-            Page::Graphics | Page::GraphicsAdvanced | Page::GraphicsHdr | Page::HdrCalibration => {
-                "options.videoTitle"
-            }
+            Page::Graphics
+            | Page::GraphicsAdvanced
+            | Page::GraphicsHdr
+            | Page::GraphicsImc
+            | Page::HdrCalibration => "options.videoTitle",
+            Page::ControlsTouch => "controls.title",
             Page::Controller | Page::PadBinds => "horizon.pages.controller",
             Page::ControllerRadial => "horizon.pages.controller_radial",
             Page::ControllerRadialName => "horizon.radial.name_title",
             Page::ControllerRadialPick => "horizon.radial.pick_title",
             Page::Extras => "horizon.pages.extras",
             Page::Pvp => "horizon.pages.pvp",
+            Page::TouchButtons => "horizon.pages.touch_buttons",
             Page::Credits => "credits_and_attribution.screen.title",
             Page::Horizon => "horizon.pages.settings",
             Page::Studio => "horizon.pages.studio",
@@ -2790,6 +2860,41 @@ impl OptionsUi {
                 rows
             }
             Page::Horizon => self.horizon_rows(s),
+            Page::TouchButtons => {
+                use horizon_client_input::touch_extras::{Extra, key_caption};
+                let on_off = |on: bool| {
+                    if on {
+                        lang::get_or("options.on", "ON")
+                    } else {
+                        lang::get_or("options.off", "OFF")
+                    }
+                };
+                let toggle = |e: Extra| {
+                    let name = lang::get_or(&format!("horizon.imc.extra.{}", e.name()), e.label());
+                    let value = Text::option_name_value(
+                        Text::literal(name),
+                        Text::literal(on_off(s.touch_extras.is_on(e))),
+                    )
+                    .plain();
+                    button(0.0, 0.0, 150.0, Text::literal(value), Act::TouchExtra(e))
+                };
+                let key = |e: Extra| {
+                    let name = lang::get_or("horizon.imc.extra.key", "Key");
+                    let value = Text::option_name_value(
+                        Text::literal(name),
+                        Text::literal(key_caption(s.touch_extras.key_of(e))),
+                    )
+                    .plain();
+                    button(0.0, 0.0, 150.0, Text::literal(value), Act::TouchExtraKey(e))
+                };
+                vec![
+                    Row::Header("horizon.imc.header.extra_buttons"),
+                    Row::Buttons(toggle(Extra::Chat), Some(toggle(Extra::Debug))),
+                    Row::Buttons(toggle(Extra::Screenshot), Some(toggle(Extra::View))),
+                    Row::Buttons(toggle(Extra::Key1), Some(key(Extra::Key1))),
+                    Row::Buttons(toggle(Extra::Key2), Some(key(Extra::Key2))),
+                ]
+            }
             Page::Agent => {
                 let mut rows = vec![Row::Buttons(
                     self.extra_button(s, crate::extras::Item::AgentControl),
@@ -2974,6 +3079,17 @@ impl OptionsUi {
                         310.0,
                         tr("horizon.pages.open.controller"),
                         Act::Push(Page::Controller),
+                    ),
+                    None,
+                ));
+                // iMC: the touch settings, which lived on the graphics screen's iMC page.
+                rows.push(Row::Buttons(
+                    button(
+                        0.0,
+                        0.0,
+                        310.0,
+                        tr("horizon.pages.open.touch"),
+                        Act::Push(Page::ControlsTouch),
                     ),
                     None,
                 ));
@@ -3450,6 +3566,14 @@ impl OptionsUi {
                                 item.cycle(&mut s.extras, self.shift);
                                 events.push(Event::Changed);
                             }
+                        }
+                        Act::TouchExtra(e) => {
+                            s.touch_extras.toggle(e);
+                            events.push(Event::Changed);
+                        }
+                        Act::TouchExtraKey(e) => {
+                            s.touch_extras.step_key(e);
+                            events.push(Event::Changed);
                         }
                         Act::PlayMusicTrack(event, track) => {
                             events.push(Event::PlayMusicTrack(event.clone(), track.clone()));
@@ -4501,6 +4625,14 @@ impl OptionsUi {
                                 item.cycle(&mut s.extras, shift);
                                 events.push(Event::Changed);
                             }
+                        }
+                        Act::TouchExtra(e) => {
+                            s.touch_extras.toggle(e);
+                            events.push(Event::Changed);
+                        }
+                        Act::TouchExtraKey(e) => {
+                            s.touch_extras.step_key(e);
+                            events.push(Event::Changed);
                         }
                         Act::PlayMusicTrack(event, track) => {
                             events.push(Event::PlayMusicTrack(event, track.clone()));
@@ -7729,6 +7861,8 @@ mod tests {
                     Item::Vanilla(o) => format!("{o:?}"),
                     Item::Horizon(h) => format!("graphics:{h:?}"),
                     Item::Extra(e) => format!("extra:{e:?}"),
+                    Item::Imc(i) => format!("imc:{i:?}"),
+                    Item::ImcDo(d) => format!("imc-do:{d:?}"),
                 };
                 graphics_rows.insert(id.clone());
                 put(id, "Graphics");
@@ -7752,6 +7886,8 @@ mod tests {
                         Act::Cycle(opt) => format!("{opt:?}"),
                         Act::Extra(e) => format!("extra:{e:?}"),
                         Act::PvpPreset => "pvp-preset".to_owned(),
+                        Act::TouchExtra(e) => format!("touch-extra:{}", e.name()),
+                        Act::TouchExtraKey(e) => format!("touch-extra-key:{}", e.name()),
                         Act::Push(to) => {
                             ways_in
                                 .entry(format!("{to:?}"))
@@ -7818,8 +7954,8 @@ mod tests {
                     Opt::GraphicsBackend => "graphics-api".to_owned(),
                     o => format!("{o:?}"),
                 };
-                // macOS has one graphics API: the graphics screen leaves the row out.
-                if id == "graphics-api" && cfg!(target_os = "macos") {
+                // Apple systems have one graphics API: the graphics screen leaves the row out.
+                if id == "graphics-api" && cfg!(target_vendor = "apple") {
                     continue;
                 }
                 assert!(
@@ -7895,6 +8031,96 @@ mod tests {
         assert!(acts.contains(&&Act::CopyAgentDetails));
         ui.stack = vec![Page::Main, Page::Controls];
         assert!(pushes(&mut ui).contains(&Page::Controller));
+    }
+
+    #[test]
+    fn imc_settings_are_rows_of_the_imc_or_the_touch_page_not_of_horizon_settings() {
+        use crate::graphics_ui::{Item as G, Page as GP, rows};
+        use horizon_client_input::imc_settings::Item;
+        // Every iMC setting is a row of the iMC page (graphics side, Video Settings) or of the touch page
+        // (Controls > Touch Controls), exactly once between them.
+        let on_page: Vec<_> = rows()
+            .into_iter()
+            .filter(|(p, _)| matches!(*p, GP::Imc | GP::Touch))
+            .flat_map(|(_, groups)| groups)
+            .flat_map(|(_, rows)| rows)
+            .map(|r| r.item)
+            .collect();
+        for item in Item::ALL {
+            assert_eq!(
+                on_page.iter().filter(|i| **i == G::Imc(item)).count(),
+                1,
+                "{item:?}"
+            );
+        }
+        // The old page and its button are gone from Horizon Settings.
+        let s = Settings::default();
+        let mut ui = OptionsUi::default();
+        ui.show(Page::Horizon);
+        let (widgets, _, _, _) = ui.layout(&s, 427.0, 240.0);
+        assert!(!widgets.iter().any(|w| matches!(
+            &w.kind,
+            WKind::Button {
+                act: Act::Push(Page::GraphicsImc),
+                ..
+            }
+        )));
+        // A click cycles the setting; Reset puts it back.
+        let mut s = Settings::default();
+        let before = s.imc.clone();
+        G::Imc(Item::LookSpeed).cycle(&mut s, false, [0, 0], &crate::gfx::EffectiveOutput::NONE);
+        assert_ne!(s.imc, before);
+        s.imc.reset();
+        assert_eq!(s.imc, before);
+    }
+
+    #[test]
+    fn the_controls_page_opens_the_touch_settings_on_their_own() {
+        use crate::graphics_ui::{Item as G, Page as GP};
+        use crate::settings_shell::Screen;
+        use horizon_client_input::imc_settings::Item;
+        let s = Settings::default();
+        let mut ui = OptionsUi::default();
+        ui.show(Page::Controls);
+        assert!(
+            ui.layout(&s, 427.0, 240.0).0.iter().any(|w| matches!(
+                &w.kind,
+                WKind::Button {
+                    act: Act::Push(Page::ControlsTouch),
+                    ..
+                }
+            )),
+            "Controls has a Touch Controls button"
+        );
+        // Opened from Controls, the screen is the touch page alone: a touch setting is there, an Auto Performance
+        // one is not, and it is not a video screen.
+        ui.show(Page::ControlsTouch);
+        assert!(!ui.video_open());
+        let pages = |ui: &OptionsUi| -> Vec<GP> {
+            ui.graphics.screen.sheets(&s).iter().map(|sheet| sheet.id).collect()
+        };
+        assert_eq!(pages(&ui), vec![GP::Touch]);
+        let rows_of = |ui: &OptionsUi| -> Vec<G> {
+            ui.graphics
+                .screen
+                .sheets(&s)
+                .iter()
+                .flat_map(|sheet| sheet.groups.iter())
+                .flat_map(|group| group.rows.iter().map(|r| r.id))
+                .collect()
+        };
+        assert!(rows_of(&ui).contains(&G::Imc(Item::LookSpeed)));
+        assert!(!rows_of(&ui).contains(&G::Imc(Item::AutoPerformance)));
+        // Opened from Video Settings, the same screen has its tabs and no touch page.
+        ui.show(Page::GraphicsImc);
+        assert!(ui.video_open());
+        assert!(!pages(&ui).contains(&GP::Touch));
+        assert!(pages(&ui).contains(&GP::Imc));
+        assert!(rows_of(&ui).contains(&G::Imc(Item::AutoPerformance)));
+        assert!(!rows_of(&ui).contains(&G::Imc(Item::LookSpeed)));
+        // Back to the Controls side, the flag follows.
+        ui.show(Page::ControlsTouch);
+        assert_eq!(pages(&ui), vec![GP::Touch]);
     }
 
     #[test]

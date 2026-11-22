@@ -663,6 +663,10 @@ impl OptionsUi {
             {
                 *active = self.in_world && self.minecart_improvements;
             }
+            // iMC Settings > Grey out unused settings: what an iPhone has no use for.
+            if s.imc.grey_unused {
+                super::grey_unused(s, widget);
+            }
         }
         self.row_bands = rows
             .bands

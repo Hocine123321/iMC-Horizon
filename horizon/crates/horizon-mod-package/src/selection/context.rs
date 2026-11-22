@@ -13,7 +13,8 @@ pub fn data_dir_with(env: impl Fn(&str) -> Option<std::ffi::OsString>) -> PathBu
         if let Some(d) = path("APPDATA") {
             return d;
         }
-    } else if cfg!(target_os = "macos") {
+    } else if cfg!(target_vendor = "apple") {
+        // macOS, and an iOS app's container (where `HOME` points).
         if let Some(h) = &home {
             return h.join("Library/Application Support");
         }

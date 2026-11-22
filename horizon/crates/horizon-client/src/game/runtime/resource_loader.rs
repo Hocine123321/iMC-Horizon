@@ -251,15 +251,17 @@ pub(super) fn write_report(game: &Game<'_>) -> Result<()> {
     Ok(())
 }
 
-/// The ordinary launch: load the resources on a worker while the window shows
-/// the loading screen, then swap in the game on the main thread.
-pub(super) fn run_loading(
+/// Build the state before entering the long-lived event loop. Keeping this in
+/// its own frame lets its construction temporaries leave the 1 MB iOS main
+/// thread stack before the loading screen hands off to the game.
+#[inline(never)]
+pub(super) fn loading_app(
     options: Options,
     settings: Settings,
     vanilla_root: PathBuf,
     pack_error: Option<String>,
     started: Instant,
-) -> Result<()> {
+) -> Result<App> {
     let progress = Progress::new();
     let (receiver, loader) = startup_menu::spawn_loader(
         &options,
@@ -294,16 +296,40 @@ pub(super) fn run_loading(
         menu,
         error: None,
     };
-    let mut app = App::Loading(Box::new(loading));
+    Ok(App::Loading(Box::new(loading)))
+}
+
+/// The ordinary launch: load the resources on a worker while the window shows
+/// the loading screen, then swap in the game on the main thread.
+pub(super) fn run_loading(
+    options: Options,
+    settings: Settings,
+    vanilla_root: PathBuf,
+    pack_error: Option<String>,
+    started: Instant,
+) -> Result<()> {
+    // iMC (iOS, Play without closing the app): Quit Game can bring the engine back to `App::Idle`, and the next Play
+    // starts a new `Loading` from these. Kept only when the shell armed the hold; every other run skips this.
+    if horizon_client_input::ios_hold::armed() {
+        loading_screen::keep_relaunch(loading_screen::Relaunch {
+            options: options.clone(),
+            settings: settings.clone(),
+            vanilla_root: vanilla_root.clone(),
+            started,
+        });
+    }
+    let mut app = loading_app(options, settings, vanilla_root, pack_error, started)?;
     let result = EventLoop::new()?.run_app(&mut app);
     narrator::stop();
     match &mut app {
         // Ready: splitscreen around P1's game.
         App::Ready(split) => leave_fullscreen_after(&result, &mut split.host.settings),
         App::Loading(loading) => leave_fullscreen_after(&result, &mut loading.settings),
+        App::Idle => {}
     }
     result?;
     match app {
+        App::Idle => {}
         App::Ready(mut split) => {
             write_report(&split.host)?;
             if let Some(e) = split.host.error.take() {

@@ -33,15 +33,24 @@ pub enum Page {
     Advanced,
     /// HDR output's own settings.
     Hdr,
+    /// The iOS app's own graphics-side settings (`imc_settings`): Auto Performance, the phone
+    /// preset and the settings greying. Last of the listed pages, so the ones before it keep
+    /// their places.
+    Imc,
+    /// The iOS app's touch settings (`imc_settings`): the on-screen controls, touch alignment
+    /// and the cursor. Not one of this screen's tabs ([`Page::ALL`]): the Controls page opens it
+    /// on its own (`GraphicsScreen::touch_view`, `options_ui::Page::ControlsTouch`).
+    Touch,
 }
 impl Page {
-    pub const ALL: [Page; 6] = [
+    pub const ALL: [Page; 7] = [
         Page::General,
         Page::Quality,
         Page::Performance,
         Page::Shaders,
         Page::Advanced,
         Page::Hdr,
+        Page::Imc,
     ];
     pub fn name(self) -> &'static str {
         match self {
@@ -51,6 +60,8 @@ impl Page {
             Page::Shaders => "Shaders",
             Page::Advanced => "Advanced",
             Page::Hdr => "HDR",
+            Page::Imc => "iMC",
+            Page::Touch => "Touch",
         }
     }
     /// What the page holds, in the strip while no setting is pointed at.
@@ -62,6 +73,8 @@ impl Page {
             Page::Shaders => "Shader packs, Horizon's and shaders/ folder ones, and their options.",
             Page::Advanced => "How frames reach the screen, and the performance overlay.",
             Page::Hdr => "Brighter-than-white output on an HDR display.",
+            Page::Imc => "The iPhone app's own settings: Auto Performance, the phone preset and greying what an iPhone doesn't use.",
+            Page::Touch => "The on-screen controls, where touches land, and the cursor.",
         }
     }
 }
@@ -131,6 +144,46 @@ pub enum Item {
     Horizon(H),
     /// A Horizon extra that changes the picture (`extras::Item`, kept in `horizon-extras.txt`).
     Extra(crate::extras::Item),
+    /// An iMC setting (`imc_settings::Item`, kept in `horizon-imc.txt`).
+    Imc(horizon_client_input::imc_settings::Item),
+    /// A button of the iMC page that does something instead of holding a value.
+    ImcDo(ImcDo),
+}
+
+/// What the iMC page's press rows do. The options screen runs them (`Action::Imc`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ImcDo {
+    /// Sets the engine up for a phone in one tap (`mobile_preset`).
+    MobilePreset,
+    /// Moves the on-screen buttons over the real view; needs a world.
+    EditControls,
+    /// Measures where this phone's touches land.
+    Calibrate,
+    /// Puts every iMC setting back.
+    Reset,
+    /// Opens the page of the six extra on-screen buttons (Chat, F3, F2, View, two keys).
+    ExtraButtons,
+}
+impl ImcDo {
+    pub fn caption(self) -> &'static str {
+        match self {
+            ImcDo::MobilePreset => "Phone preset",
+            ImcDo::EditControls => "Edit touch controls",
+            ImcDo::Calibrate => "Calibrate touch",
+            ImcDo::Reset => "Reset iMC settings",
+            ImcDo::ExtraButtons => "Extra buttons",
+        }
+    }
+    /// The language key of the caption, as the old page's buttons had.
+    pub fn caption_key(self) -> &'static str {
+        match self {
+            ImcDo::MobilePreset => "horizon.imc.mobile",
+            ImcDo::EditControls => "horizon.imc.editor",
+            ImcDo::Calibrate => "horizon.imc.calibrate",
+            ImcDo::Reset => "horizon.imc.reset",
+            ImcDo::ExtraButtons => "horizon.imc.extra_buttons",
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -159,6 +212,64 @@ fn e(item: crate::extras::Item, cost: Cost) -> Setting {
         item: Item::Extra(item),
         cost,
         text: item.description_key(),
+    }
+}
+
+/// An iMC setting's row: its description is its own language key (`horizon.imc.<key>.tooltip`),
+/// as the old page's tooltip was. `cost` is what turning it on spends.
+fn m(item: horizon_client_input::imc_settings::Item, cost: Cost) -> Setting {
+    Setting {
+        item: Item::Imc(item),
+        cost,
+        text: imc_description_key(item),
+    }
+}
+/// A press row of the iMC page.
+fn md(item: ImcDo, cost: Cost) -> Setting {
+    Setting {
+        item: Item::ImcDo(item),
+        cost,
+        text: match item {
+            ImcDo::MobilePreset => "horizon.imc.mobile.tooltip",
+            ImcDo::EditControls => "horizon.imc.editor.tooltip",
+            ImcDo::Calibrate => "horizon.imc.calibrate.tooltip",
+            // No tooltip key of its own in the old page: the English text is the fallback.
+            ImcDo::Reset => "horizon.imc.reset.tooltip",
+            ImcDo::ExtraButtons => "horizon.imc.extra_buttons.tooltip",
+        },
+    }
+}
+/// `imc_settings::Item::description_key` as a `&'static str` (the rows carry a static key).
+fn imc_description_key(item: horizon_client_input::imc_settings::Item) -> &'static str {
+    use horizon_client_input::imc_settings::Item as I;
+    match item {
+        I::Controls => "horizon.imc.touchControls.tooltip",
+        I::LookSpeed => "horizon.imc.lookSpeed.tooltip",
+        I::StickSize => "horizon.imc.stickSize.tooltip",
+        I::MoveZone => "horizon.imc.moveZone.tooltip",
+        I::HoldTime => "horizon.imc.holdTime.tooltip",
+        I::DoubleTapJump => "horizon.imc.doubleTapJump.tooltip",
+        I::GreyUnused => "horizon.imc.greyUnused.tooltip",
+        I::MenuTouch => "horizon.imc.menuTouch.tooltip",
+        I::ButtonShiftX => "horizon.imc.buttonShiftX.tooltip",
+        I::ButtonShiftY => "horizon.imc.buttonShiftY.tooltip",
+        I::AutoSprint => "horizon.imc.autoSprint.tooltip",
+        I::ShiftX => "horizon.imc.shiftX.tooltip",
+        I::ShiftY => "horizon.imc.shiftY.tooltip",
+        I::SafeMargin => "horizon.imc.safeMargin.tooltip",
+        I::AutoPerformance => "horizon.imc.autoPerformance.tooltip",
+        I::AutoSensitivity => "horizon.imc.autoSensitivity.tooltip",
+        I::AutoMinDistance => "horizon.imc.autoMinDistance.tooltip",
+        I::AutoFarTerrain => "horizon.imc.autoFarTerrain.tooltip",
+        I::AutoRenderDistance => "horizon.imc.autoRenderDistance.tooltip",
+        I::AutoResolution => "horizon.imc.autoResolution.tooltip",
+        I::CursorInventory => "horizon.imc.cursorInventory.tooltip",
+        I::CursorSpeed => "horizon.imc.cursorSpeed.tooltip",
+        I::CursorHold => "horizon.imc.cursorHold.tooltip",
+        I::CursorDragGrab => "horizon.imc.cursorDragGrab.tooltip",
+        I::WorldControls => "horizon.imc.worldControls.tooltip",
+        I::AirHold => "horizon.imc.airHold.tooltip",
+        I::AirHoldDelay => "horizon.imc.airHoldDelay.tooltip",
     }
 }
 
@@ -647,6 +758,77 @@ pub fn rows() -> Vec<(Page, Vec<(&'static str, Vec<Setting>)>)> {
                 ),
             ],
         ),
+        (
+            Page::Imc,
+            {
+                use horizon_client_input::imc_settings::Item as I;
+                vec![
+                    (
+                        "Auto Performance",
+                        vec![
+                            m(I::AutoPerformance, Saves),
+                            m(I::AutoSensitivity, None),
+                            m(I::AutoRenderDistance, Saves),
+                            m(I::AutoMinDistance, None),
+                            m(I::AutoFarTerrain, Saves),
+                            m(I::AutoResolution, Saves),
+                        ],
+                    ),
+                    ("Interface", vec![m(I::GreyUnused, None)]),
+                    (
+                        "Presets",
+                        vec![md(ImcDo::MobilePreset, Saves), md(ImcDo::Reset, None)],
+                    ),
+                ]
+            },
+        ),
+        // The touch settings, which the Controls page opens (`Page::Touch` is not a tab here).
+        (
+            Page::Touch,
+            {
+                use horizon_client_input::imc_settings::Item as I;
+                vec![
+                    (
+                        "Touch controls",
+                        vec![
+                            m(I::Controls, None),
+                            m(I::WorldControls, None),
+                            m(I::AirHold, None),
+                            m(I::AirHoldDelay, None),
+                            m(I::DoubleTapJump, None),
+                            m(I::LookSpeed, None),
+                            m(I::HoldTime, None),
+                            m(I::StickSize, None),
+                            m(I::MoveZone, None),
+                            m(I::AutoSprint, None),
+                            md(ImcDo::EditControls, None),
+                            md(ImcDo::ExtraButtons, None),
+                        ],
+                    ),
+                    (
+                        "Touch alignment",
+                        vec![
+                            m(I::MenuTouch, None),
+                            m(I::SafeMargin, None),
+                            m(I::ShiftX, None),
+                            m(I::ShiftY, None),
+                            m(I::ButtonShiftX, None),
+                            m(I::ButtonShiftY, None),
+                            md(ImcDo::Calibrate, None),
+                        ],
+                    ),
+                    (
+                        "Cursor",
+                        vec![
+                            m(I::CursorInventory, None),
+                            m(I::CursorSpeed, None),
+                            m(I::CursorHold, None),
+                            m(I::CursorDragGrab, None),
+                        ],
+                    ),
+                ]
+            },
+        ),
     ];
     // The fork forces ticking serial, so Parallel Tick would be a no-op setting.
     for (_, groups) in &mut pages {
@@ -656,7 +838,7 @@ pub fn rows() -> Vec<(Page, Vec<(&'static str, Vec<Setting>)>)> {
     }
     // Only Windows and Linux have more than one graphics API, translucent batching (Metal
     // draws flat) and GPU culling (Metal draws no count the GPU wrote).
-    if cfg!(target_os = "macos") {
+    if cfg!(target_vendor = "apple") {
         for (_, groups) in &mut pages {
             for (_, rows) in groups {
                 rows.retain(|r| {
@@ -1182,6 +1364,26 @@ impl Item {
         if !self.available() {
             return Some("This feature is not yet available in Horizon.");
         }
+        // iMC Settings > Grey out unused settings: a setting an iPhone has no use for.
+        if s.imc.grey_unused
+            && let Some(reason) = match self {
+                Item::Vanilla(o) => crate::ios_unused::opt(o),
+                Item::Horizon(h) => crate::ios_unused::graphics(h),
+                Item::Extra(e) => crate::ios_unused::extra(e),
+                // The iMC page is the phone's own: nothing on it is unused.
+                Item::Imc(_) | Item::ImcDo(_) => None,
+            }
+        {
+            return Some(reason);
+        }
+        // The old page greyed what does nothing: an Auto Performance choice while it is off, and
+        // the touch editor outside a world.
+        match self {
+            Item::Imc(i) if !s.imc.is_active(i) => {
+                return Some("Turn Auto Performance on to use it.");
+            }
+            _ => {}
+        }
         match self {
             Item::Horizon(
                 H::Hdr
@@ -1254,7 +1456,10 @@ impl Item {
     fn steps(self, s: &Settings) -> bool {
         self.switch(s).is_none()
             && self.slider(s).is_none()
-            && !matches!(self, Item::Horizon(H::HdrCalibrate | H::ShaderPacks))
+            && !matches!(
+                self,
+                Item::Horizon(H::HdrCalibrate | H::ShaderPacks) | Item::ImcDo(_)
+            )
     }
     /// On/off settings and their value.
     pub fn switch(self, s: &Settings) -> Option<bool> {
@@ -1283,6 +1488,8 @@ impl Item {
             }
             Item::Vanilla(Opt::Vsync) => s.vsync,
             Item::Extra(e) => return e.switch(&s.extras),
+            Item::Imc(i) => return imc_switch(i, s),
+            Item::ImcDo(_) => return None,
             Item::Vanilla(Opt::Fullscreen) => s.fullscreen,
             Item::Vanilla(Opt::ExclusiveFullscreen) => s.file.bool("exclusiveFullscreen"),
             Item::Vanilla(Opt::SmoothLighting) => s.smooth_lighting,
@@ -1298,7 +1505,7 @@ impl Item {
         match self {
             Item::Vanilla(o) => o.slider_position(s),
             Item::Horizon(h) => h.slider(s),
-            Item::Extra(_) => None,
+            Item::Extra(_) | Item::Imc(_) | Item::ImcDo(_) => None,
         }
     }
     pub fn label(self, s: &Settings, out: &EffectiveOutput) -> Text {
@@ -1316,6 +1523,21 @@ impl Item {
                 Text::literal(e.caption_text()),
                 Text::literal(e.value(&s.extras)),
             ),
+            Item::Imc(i) => Text::option_name_value(
+                Text::literal(lang::get_or(&i.caption_key(), i.caption())),
+                Text::literal(imc_value(i, s)),
+            ),
+            // The preset row names what is on now and what a press does next, so a press that
+            // worked is visible and a preset changed by hand stops claiming to be on.
+            Item::ImcDo(ImcDo::MobilePreset) => {
+                let caption = lang::get_or(ImcDo::MobilePreset.caption_key(), "Phone preset");
+                let (now, next) = match crate::mobile_preset::current(s) {
+                    Some(k) => (k.name(), k.next().name()),
+                    None => ("Custom", crate::mobile_preset::Kind::Mobile.name()),
+                };
+                Text::literal(format!("{caption}: {now} (tap for {next})"))
+            }
+            Item::ImcDo(d) => Text::literal(lang::get_or(d.caption_key(), d.caption())),
         }
     }
     pub fn set_slider(self, s: &mut Settings, v: f32, out: &EffectiveOutput) {
@@ -1326,7 +1548,7 @@ impl Item {
             // Options.applyGraphicsPreset, as Video Settings' slider does it.
             Item::Vanilla(o) => crate::options_ui::set_slider(o, s, v),
             Item::Horizon(h) => h.set_slider(s, v),
-            Item::Extra(_) => {}
+            Item::Extra(_) | Item::Imc(_) | Item::ImcDo(_) => {}
         }
         self.touched(s);
     }
@@ -1338,6 +1560,8 @@ impl Item {
             Item::Vanilla(o) => o.cycle(s, back, framebuffer),
             Item::Horizon(h) => h.cycle(s, back, out),
             Item::Extra(e) => e.cycle(&mut s.extras, back),
+            Item::Imc(i) => s.imc.cycle(i, back),
+            Item::ImcDo(_) => {}
         }
         self.touched(s);
     }
@@ -1346,6 +1570,8 @@ impl Item {
         let presetless = matches!(
             self,
             Item::Extra(_)
+                | Item::Imc(_)
+                | Item::ImcDo(_)
                 | Item::Horizon(
                     H::Preset
                         | H::BlueMapAutoDetect
@@ -1387,7 +1613,7 @@ impl Item {
         match self {
             Item::Vanilla(o) => o.slider_steps(),
             Item::Horizon(h) => h.slider_steps(),
-            Item::Extra(_) => None,
+            Item::Extra(_) | Item::Imc(_) | Item::ImcDo(_) => None,
         }
     }
     pub fn step_slider(self, s: &mut Settings, forward: bool, width: f32, out: &EffectiveOutput) {
@@ -1414,6 +1640,19 @@ fn shown(item: Item, s: &Settings) -> bool {
 /// A control's label as its name and its value ("Render Distance" and "12 chunks").
 fn parts(item: Item, s: &Settings, out: &EffectiveOutput) -> (String, Option<String>) {
     shell::name_and_value(&item.label(s, out).plain())
+}
+
+/// An iMC setting's value in the player's language ("On" and "Off" as the game's own).
+fn imc_value(i: horizon_client_input::imc_settings::Item, s: &Settings) -> String {
+    match s.imc.value(i) {
+        "On" => lang::get_or("options.on", "ON"),
+        "Off" => lang::get_or("options.off", "OFF"),
+        other => other.to_owned(),
+    }
+}
+/// The iMC settings that are plain on/off, shown as tick boxes like the other pages' switches.
+fn imc_switch(i: horizon_client_input::imc_settings::Item, s: &Settings) -> Option<bool> {
+    (s.imc.value(i) == "On" || s.imc.value(i) == "Off").then(|| s.imc.value(i) == "On")
 }
 
 /// A setting's row: its control, what it does (and what its chosen value does), what it costs,
@@ -1505,6 +1744,10 @@ pub struct GraphicsScreen {
     /// The output of the renderer the settings are drawn for (`OptionsUi::draw_background`), handed in
     /// each time the screen is reached.
     pub(crate) output: EffectiveOutput,
+    /// iMC: the screen is open as the Controls page's touch settings (`Page::Touch` alone), not as
+    /// Horizon's graphics settings (every page but that one). The options screen sets it each
+    /// time it opens either.
+    pub(crate) touch_view: bool,
 }
 
 impl Screen for GraphicsScreen {
@@ -1522,7 +1765,13 @@ impl Screen for GraphicsScreen {
             g::gpu_culling_offer(),
             g::reduced_far_detail_suggested(),
         );
-        shell::stamp_of(&(read(s), s.fullbright_held, &s.running_pack, offers))
+        shell::stamp_of(&(
+            read(s),
+            s.fullbright_held,
+            &s.running_pack,
+            offers,
+            self.touch_view,
+        ))
     }
     fn sheets(&self, s: &Settings) -> Vec<Sheet<Page, Item>> {
         let sheet = |(page, groups): (Page, Vec<(&'static str, Vec<Setting>)>)| Sheet {
@@ -1544,7 +1793,13 @@ impl Screen for GraphicsScreen {
             listed: true,
             heading: None,
         };
-        rows().into_iter().map(sheet).collect()
+        // One screen, two ways in: the touch page alone (Controls > Touch controls), or every
+        // other page (Video Settings), so neither one's search finds the other's rows.
+        rows()
+            .into_iter()
+            .filter(|(page, _)| (*page == Page::Touch) == self.touch_view)
+            .map(sheet)
+            .collect()
     }
     fn press(&mut self, s: &mut Settings, item: Item, back: bool) -> Vec<Output> {
         match item {
@@ -1563,6 +1818,24 @@ impl Screen for GraphicsScreen {
                     Output::Push(OptionsPage::ShaderPacks),
                 ]
             }
+            // The iMC page's press rows, which do what the old page's buttons did.
+            // Each press of the phone preset steps to the next one (Mobile, Battery saver,
+            // Smooth); from custom settings the first press is Mobile.
+            Item::ImcDo(ImcDo::MobilePreset) => {
+                let next = crate::mobile_preset::current(s).map_or(
+                    crate::mobile_preset::Kind::Mobile,
+                    crate::mobile_preset::Kind::next,
+                );
+                crate::mobile_preset::apply_kind(next, s);
+                vec![Output::Event(Event::Changed)]
+            }
+            Item::ImcDo(ImcDo::EditControls) => vec![Output::Event(Event::TouchEditor)],
+            Item::ImcDo(ImcDo::Calibrate) => vec![Output::Event(Event::TouchCalibrate)],
+            Item::ImcDo(ImcDo::Reset) => {
+                s.imc.reset();
+                vec![Output::Event(Event::Changed)]
+            }
+            Item::ImcDo(ImcDo::ExtraButtons) => vec![Output::Push(OptionsPage::TouchButtons)],
             _ => {
                 item.cycle(s, back, self.framebuffer, &self.output);
                 vec![Output::Event(Event::Changed)]
@@ -1792,7 +2065,7 @@ mod tests {
             false,
             false,
         );
-        assert_eq!(ui.current_page(&s, size), Some(Page::Hdr));
+        assert_eq!(ui.current_page(&s, size), Some(Page::Imc));
     }
 
     #[test]
@@ -1834,7 +2107,8 @@ mod tests {
             [general(Item::Vanilla(Opt::FovEffects))]
         );
         ui.set_search("hdr");
-        let [x, y, w, h] = cols.page(Page::ALL.len() - 1);
+        let hdr = Page::ALL.iter().position(|p| *p == Page::Hdr).unwrap();
+        let [x, y, w, h] = cols.page(hdr);
         press(&mut ui, &mut s, (x + w / 2.0, y + h / 2.0));
         assert_eq!(ui.current_page(&s, SIZE), Some(Page::Hdr));
         let [x, y, ..] = cols.clear();
@@ -2049,7 +2323,7 @@ mod tests {
         // Up from Done: the page list's last page.
         ui.set_focus(Some(Target::Done));
         key(&mut ui, &mut s, K::ArrowUp);
-        assert_eq!(ui.focused(), Some(Target::Page(Page::Hdr)));
+        assert_eq!(ui.focused(), Some(Target::Page(Page::Imc)));
         // Its row wheeled far out of view: Down takes the first row in view, as it is.
         focus_on(&mut ui, Item::Horizon(H::Preset));
         ui.scroll(&s, SIZE, -1000.0);
@@ -2156,6 +2430,7 @@ mod tests {
         let mut screen = GraphicsScreen {
             framebuffer: FB,
             output: NONE,
+            touch_view: false,
         };
         let default = Settings::default();
         for (_, item) in items() {
@@ -2583,7 +2858,7 @@ mod tests {
             .into_iter()
             .find(|(_, i)| *i == item)
             .map(|(p, _)| p);
-        if cfg!(target_os = "macos") {
+        if cfg!(target_vendor = "apple") {
             // Metal draws flat: never offered, so not shown.
             assert_eq!(page, None);
             return;
@@ -2629,7 +2904,7 @@ mod tests {
         use crate::graphics::GpuCullingOffer;
         let item = Item::Horizon(H::GpuCulling);
         let at = |item| items().into_iter().position(|(_, i)| i == item);
-        if cfg!(target_os = "macos") {
+        if cfg!(target_vendor = "apple") {
             // Metal draws no count the GPU wrote: never offered, so not shown.
             assert_eq!(at(item), None);
             return;

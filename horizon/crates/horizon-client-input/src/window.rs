@@ -619,6 +619,13 @@ pub fn borderless_fullscreen(window: &winit::window::Window) -> winit::window::F
     )
 }
 
+/// The size to ask a new window for. On iOS winit takes `inner_size` as the frame of the
+/// `UIWindow`, from the screen's corner, so a desktop-sized request (1040x700 points) makes a
+/// window larger than the phone and hangs it off the edges; with no size it fills the screen.
+pub fn creation_size(size: winit::dpi::LogicalSize<f64>) -> Option<winit::dpi::LogicalSize<f64>> {
+    (!cfg!(target_os = "ios")).then_some(size)
+}
+
 /// A window created fullscreen that the system also marked maximized enters it again
 /// unmaximized ([`enter_fullscreen`]); only Windows does that.
 pub fn settle_created_fullscreen(window: &winit::window::Window, fullscreen: bool) {
@@ -709,6 +716,19 @@ pub fn with_icon(attributes: winit::window::WindowAttributes) -> winit::window::
     #[cfg(target_os = "windows")]
     let attributes =
         winit::platform::windows::WindowAttributesExtWindows::with_taskbar_icon(attributes, icon);
+    // iMC (iOS): the app's Info.plist allows portrait for the launcher, so the game window says it is
+    // landscape only. winit's default would let the game turn upright.
+    // While the app waits for Play (crate::ios_hold) the window is portrait, like the launcher over it, so the
+    // app does not start in landscape and turn; Play switches it to landscape (`Loading::about_to_wait`).
+    #[cfg(target_os = "ios")]
+    let attributes = winit::platform::ios::WindowAttributesExtIOS::with_valid_orientations(
+        attributes,
+        if crate::ios_hold::window_starts_portrait() {
+            winit::platform::ios::ValidOrientations::Portrait
+        } else {
+            winit::platform::ios::ValidOrientations::Landscape
+        },
+    );
     attributes
 }
 
@@ -785,6 +805,15 @@ mod tests {
                 scale: 10,
                 size: [384, 216]
             }
+        );
+    }
+
+    #[test]
+    fn a_new_window_asks_for_its_size_except_on_ios() {
+        let size = winit::dpi::LogicalSize::new(1040.0, 700.0);
+        assert_eq!(
+            creation_size(size),
+            if cfg!(target_os = "ios") { None } else { Some(size) }
         );
     }
 

@@ -382,6 +382,7 @@ impl Game<'_> {
                     self.sync_pregen_option();
                     self.sync_agent_control();
                     self.ui.options.agent_status = self.agent_status_lines();
+                    self.ui.options.perf_status = self.auto_performance_status();
                 }
                 Event::SliderDrag => {
                     self.apply_settings();
@@ -525,6 +526,8 @@ impl Game<'_> {
                 Event::NativeSetting(i, j) => self.native_setting_event(i, j),
                 Event::Credits => self.open_win_screen(false, super::win::Finish::Options),
                 Event::HudEditor => self.open_hud_editor(true),
+                Event::TouchEditor => self.open_touch_editor(true),
+                Event::TouchCalibrate => self.open_touch_calibration(),
                 // AccessibilityOptionsScreen's link button: ConfirmLinkScreen
                 // back to the options screen.
                 Event::AccessibilityHelp => {
@@ -595,6 +598,8 @@ impl Game<'_> {
             self.reload_packs();
         }
         self.apply_fullscreen();
+        // Auto Performance's cap, worked out before `renderer` is borrowed.
+        let resolution_scale = self.capped_resolution_scale();
         // A failed HDR start that named no driver becomes the window's driver's, and another
         // driver's is dropped, so HDR output is tried again.
         if let Some(driver) = self.renderer.as_ref().and_then(|r| r.hdr_driver())
@@ -621,7 +626,8 @@ impl Game<'_> {
             if !s.horizon.dynamic_resolution {
                 self.dynamic_resolution.reset();
             }
-            let scale = super::frame_autotune::world_scale(&s.horizon, &self.dynamic_resolution);
+            let scale = super::frame_autotune::world_scale(&s.horizon, &self.dynamic_resolution)
+                .min(resolution_scale);
             super::frame_autotune::apply_world_post(r, &s.horizon, scale);
             r.set_frame_generation(
                 s.horizon.frame_generation != horizon_client::graphics::FrameGeneration::Off,

@@ -547,7 +547,8 @@ fn debug_options_interrupts(screen: Screen, playing_overlay: bool) -> bool {
         | Screen::DebugOptions
         | Screen::HudEditor
         | Screen::Studio
-        | Screen::EmoteWheel => false,
+        | Screen::EmoteWheel
+        | Screen::TouchEditor => false,
     }
 }
 

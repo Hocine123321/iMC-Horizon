@@ -373,6 +373,7 @@ impl Game<'_> {
         matches!(
             self.screen,
             Screen::HudEditor
+                | Screen::TouchEditor
                 | Screen::Inventory
                 | Screen::Creative
                 | Screen::Stats

@@ -210,6 +210,16 @@ pub struct Settings {
     pub controller: crate::gamepad::PadSettings,
     /// Horizon's optional extras (`horizon-extras.txt`), all off by default.
     pub extras: crate::extras::Extras,
+    /// iMC Settings, the iOS app's own (`horizon-imc.txt`, not options.txt).
+    pub imc: horizon_client_input::imc_settings::ImcSettings,
+    /// Where the player put the on-screen touch buttons (`horizon-touch-layout.txt`).
+    pub touch_layout: horizon_client_input::touch_layout::ControlLayout,
+    /// The correction fitted from the player's own taps (`horizon-imc-touch-calibration.txt`).
+    pub touch_calibration: horizon_client_input::touch_calibration::Calibration,
+    /// The extra on-screen buttons that are on, and their keys (`horizon-imc-buttons.txt`).
+    pub touch_extras: horizon_client_input::touch_extras::Extras,
+    /// The layouts the player kept in the touch editor (`horizon-touch-presets.txt`).
+    pub touch_presets: horizon_client_input::touch_editor_tools::Presets,
     /// The Horizon mods turned on (`horizon-mods.txt`), all off by default.
     pub mods: crate::mod_list::ModList,
     /// The packs in `shaderpacks/`, listed when the Shader Packs page opens; the pick is
@@ -302,6 +312,11 @@ impl Default for Settings {
             fullbright_held: false,
             controller: Default::default(),
             extras: Default::default(),
+            imc: Default::default(),
+            touch_layout: Default::default(),
+            touch_calibration: Default::default(),
+            touch_extras: Default::default(),
+            touch_presets: Default::default(),
             mods: Default::default(),
             shader_packs: Vec::new(),
             shader_options: None,
@@ -375,6 +390,41 @@ impl Settings {
             .and_then(|dir| fs::read_to_string(dir.join(crate::extras::FILE)).ok())
             .unwrap_or_default();
         let mut extras = crate::extras::Extras::parse(&extras_text);
+        let imc = path
+            .parent()
+            .and_then(|dir| {
+                fs::read_to_string(dir.join(horizon_client_input::imc_settings::FILE)).ok()
+            })
+            .map(|text| horizon_client_input::imc_settings::ImcSettings::parse(&text))
+            .unwrap_or_default();
+        let touch_layout = path
+            .parent()
+            .and_then(|dir| {
+                fs::read_to_string(dir.join(horizon_client_input::touch_layout::FILE)).ok()
+            })
+            .map(|text| horizon_client_input::touch_layout::ControlLayout::parse(&text))
+            .unwrap_or_default();
+        let touch_calibration = path
+            .parent()
+            .and_then(|dir| {
+                fs::read_to_string(dir.join(horizon_client_input::touch_calibration::FILE)).ok()
+            })
+            .map(|text| horizon_client_input::touch_calibration::Calibration::parse(&text))
+            .unwrap_or_default();
+        let touch_extras = path
+            .parent()
+            .and_then(|dir| {
+                fs::read_to_string(dir.join(horizon_client_input::touch_extras::FILE)).ok()
+            })
+            .map(|text| horizon_client_input::touch_extras::Extras::parse(&text))
+            .unwrap_or_default();
+        let touch_presets = path
+            .parent()
+            .and_then(|dir| {
+                fs::read_to_string(dir.join(horizon_client_input::touch_editor_tools::FILE)).ok()
+            })
+            .map(|text| horizon_client_input::touch_editor_tools::Presets::parse(&text))
+            .unwrap_or_default();
         // The settings stores of the crates above the engine: their lines of this file, or of
         // their own (docs/layers.md, "Platform registries").
         horizon_hooks::settings::engine::load(&mut |file| match path.parent() {
@@ -401,6 +451,11 @@ impl Settings {
                     horizon,
                     controller,
                     extras,
+                    imc,
+                    touch_layout,
+                    touch_calibration,
+                    touch_extras,
+                    touch_presets,
                     mods,
                     ..parsed
                 }
@@ -409,6 +464,11 @@ impl Settings {
                 horizon,
                 controller,
                 extras,
+                imc,
+                touch_layout,
+                touch_calibration,
+                touch_extras,
+                touch_presets,
                 mods,
                 ..Self::default()
             },
@@ -542,6 +602,11 @@ impl Settings {
             fullbright_held: false,
             controller: Default::default(),
             extras: Default::default(),
+            imc: Default::default(),
+            touch_layout: Default::default(),
+            touch_calibration: Default::default(),
+            touch_extras: Default::default(),
+            touch_presets: Default::default(),
             mods: Default::default(),
             shader_packs: Vec::new(),
             shader_options: None,
@@ -722,6 +787,11 @@ impl Settings {
             horizon,
             controller: self.controller.clone(),
             extras: self.extras.clone(),
+            imc: self.imc.clone(),
+            touch_layout: self.touch_layout.clone(),
+            touch_calibration: self.touch_calibration,
+            touch_extras: self.touch_extras.clone(),
+            touch_presets: self.touch_presets.clone(),
             mods: self.mods.clone(),
             video_modes: self.video_modes.clone(),
             ..parsed
@@ -746,6 +816,27 @@ impl Settings {
             let mut extras = self.extras.clone();
             extras.emote_key = self.keys.get("key.emote").to_owned();
             extras.save(dir);
+            // Like the extras file: nothing is written until the player changes something.
+            let imc_path = dir.join(horizon_client_input::imc_settings::FILE);
+            if self.imc != Default::default() || imc_path.exists() {
+                let _ = fs::write(imc_path, self.imc.serialize());
+            }
+            let layout_path = dir.join(horizon_client_input::touch_layout::FILE);
+            if !self.touch_layout.is_default() || layout_path.exists() {
+                let _ = fs::write(layout_path, self.touch_layout.serialize());
+            }
+            let calibration_path = dir.join(horizon_client_input::touch_calibration::FILE);
+            if !self.touch_calibration.is_identity() || calibration_path.exists() {
+                let _ = fs::write(calibration_path, self.touch_calibration.to_text());
+            }
+            let extras_path = dir.join(horizon_client_input::touch_extras::FILE);
+            if !self.touch_extras.is_default() || extras_path.exists() {
+                let _ = fs::write(extras_path, self.touch_extras.serialize());
+            }
+            let presets_path = dir.join(horizon_client_input::touch_editor_tools::FILE);
+            if !self.touch_presets.is_default() || presets_path.exists() {
+                let _ = fs::write(presets_path, self.touch_presets.serialize());
+            }
             horizon_hooks::settings::engine::save_own(dir, &[crate::extras::FILE]);
             self.mods.save(&crate::logging::shared_dir(dir));
         }

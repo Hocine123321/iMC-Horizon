@@ -1042,7 +1042,7 @@ impl Game<'_> {
             self.res.threads(),
         );
         streaming.remote = true;
-        streaming.radius = self.settings.render_distance;
+        streaming.radius = self.capped_render_distance();
         self.streaming = streaming;
         self.world = Game::world_for_mods(self.res.facts().air, 0);
         self.save = Arc::new(SaveDir::new(
@@ -1310,7 +1310,7 @@ impl Game<'_> {
             self.res.threads(),
         );
         streaming.remote = true;
-        streaming.radius = self.settings.render_distance;
+        streaming.radius = self.capped_render_distance();
         self.streaming = streaming;
         self.world = Game::world_for_mods(self.res.facts().air, 0);
         self.save = Arc::new(SaveDir::new(
@@ -3348,8 +3348,7 @@ impl Game<'_> {
                 // LocalPlayer.setReducedDebugInfo always rebuilds, also on a second login.
                 self.debug_entries.invalidate();
                 self.streaming.radius = self
-                    .settings
-                    .render_distance
+                    .capped_render_distance()
                     .min(p.chunk_radius.saturating_add(1))
                     .max(2);
 
@@ -5158,9 +5157,9 @@ impl Game<'_> {
                 }
             }
             C::SetChunkCacheRadius(p) => {
+                // iMC: the render distance held to Auto Performance's cap, as at the other streaming-radius sites.
                 self.streaming.radius = self
-                    .settings
-                    .render_distance
+                    .capped_render_distance()
                     .min(p.distance.saturating_add(1))
                     .max(2);
                 if let Some(r) = self.remote.as_mut() {

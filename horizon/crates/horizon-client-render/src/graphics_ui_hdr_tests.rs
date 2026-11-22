@@ -432,6 +432,7 @@ fn undo_never_restores_a_held_hdr_start() {
     let mut screen = GraphicsScreen {
         framebuffer: FB,
         output: NONE,
+        touch_view: false,
     };
     let mut opened = Settings::default();
     opened.horizon.hdr = HdrMode::Auto;

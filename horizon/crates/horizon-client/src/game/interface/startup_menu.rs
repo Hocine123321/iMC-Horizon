@@ -418,6 +418,14 @@ pub(super) fn spawn_loader(
     let handle = horizon_guest_stack::builder()
         .name("resource-loader".into())
         .spawn(move || {
+            // iMC (iOS, Play without closing the app): when the shell armed the hold, the engine is up
+            // with its window but does not read any game file until Play (docs/IN_PROCESS_PLAY_DESIGN.md).
+            // Unarmed, which is every other build and run, this returns at once. If the app is leaving,
+            // the loader ends without loading and says so, so `Loading` reports it like any failed load.
+            if !horizon_client_input::ios_hold::wait_for_play() {
+                let _ = sender.send(LoaderMsg::Done(Err("the app closed before Play".into())));
+                return;
+            }
             let mut pack_error = None;
             let root =
                 packs::startup_root(&vanilla_root, &settings.resource_packs, &[], &mod_sources)
@@ -453,6 +461,8 @@ pub(super) fn spawn_loader(
 }
 
 impl Loading {
+    // Not inlined: it reaches `set_ui`, and the stack on iOS is 1 MB (docs/IOS_CRASH_STACK.md).
+    #[inline(never)]
     pub(super) fn poll_menu_resources(&mut self) -> Result<()> {
         // Once `Done` arrived the generation is over: the caller may have taken
         // its result, and the finished loader's channel is closed.
@@ -748,7 +758,11 @@ impl Loading {
                 }
                 // Mods' settings pages open only in a running game.
                 // The HUD editor needs a world: its button is inactive here.
-                Event::NativeSettings(_) | Event::NativeSetting(..) | Event::HudEditor => {}
+                Event::NativeSettings(_)
+                | Event::NativeSetting(..)
+                | Event::HudEditor
+                | Event::TouchEditor
+                | Event::TouchCalibrate => {}
                 // The startup menu runs before the game opens a control socket,
                 // and before its sound engine (no clicks, no volume previews,
                 // and no music tracks to list or play).
@@ -850,6 +864,8 @@ impl Loading {
 
     fn menu_action(&mut self, event_loop: &dyn EventLoopCtl, action: Action) {
         match action {
+            // iOS in-process Play (off unless the shell allows it): Quit Game is a request to go back to the launcher.
+            Action::Quit if horizon_client_input::ios_hold::request_quit() => {}
             Action::Quit => event_loop.exit(),
             Action::Options => self.open_menu_options(Page::Main),
             Action::Accessibility => self.open_menu_options(Page::Accessibility),

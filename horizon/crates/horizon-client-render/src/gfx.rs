@@ -283,6 +283,20 @@ use section_fade::{
 };
 pub use view::{View, ViewSet};
 
+/// Where the app reports the step it has reached. Set once by the iOS bridge
+/// (`platform/ios-bridge`) to the shell's crash reporter; nothing elsewhere sets it. This crate
+/// forbids `unsafe`, so the call into the shell lives in the bridge and is handed over as a plain
+/// function.
+pub static BREADCRUMB: std::sync::OnceLock<fn(&str)> = std::sync::OnceLock::new();
+
+/// Names the step the game has reached, so a crash report from a phone says where it stopped
+/// (`platform/ios/App/CrashReporter.m` keeps it). Nothing happens when no app has asked for it.
+pub fn breadcrumb(step: &str) {
+    if let Some(report) = BREADCRUMB.get() {
+        report(step);
+    }
+}
+
 /// Window.getAppropriateLineWidth, in framebuffer pixels.
 pub fn outline_width(width: u32) -> f32 {
     2.5f32.max(width as f32 / 1920.0 * 2.5)
@@ -12613,6 +12627,8 @@ mod tests {
                 [Backends::default()]
             );
             assert_eq!(order(api, "macos", "aarch64"), [Backends::default()]);
+            assert_eq!(order(api, "ios", "aarch64"), [Backends::default()]);
+            assert_eq!(order(api, "ios", "aarch64"), [Backends::default()]);
         }
     }
     #[test]
@@ -12643,9 +12659,9 @@ mod tests {
             search(GraphicsApi::OpenGl, "linux", "x86_64"),
             [(vec![g], false), (vec![v], false), (vec![g], true)]
         );
-        // WGPU_BACKEND and macOS: one set of backends, nothing else to try.
+        // WGPU_BACKEND, macOS and iOS: one set of backends, nothing else to try.
         let all = Backends::default();
-        for (os, env) in [("windows", true), ("macos", false)] {
+        for (os, env) in [("windows", true), ("macos", false), ("ios", false)] {
             assert_eq!(
                 device_search(GraphicsApi::Vulkan, os, "x86_64", env),
                 [(vec![all], false), (vec![all], true)]

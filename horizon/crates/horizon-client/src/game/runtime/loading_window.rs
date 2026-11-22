@@ -122,6 +122,8 @@ pub(super) fn build_renderer(
 /// The loading screen's renderer: one atlas (the boot screen's until the
 /// pack's GUI atlas is ready) over one opaque white block-sprite layer, an
 /// empty border texture and the title panorama once the menu bundle is ready.
+// Not inlined: `Renderer::new` runs inside it, and on iOS the main thread has 1 MB of stack.
+#[inline(never)]
 pub(super) fn loading_renderer(
     window: Arc<Window>,
     offscreen: bool,
@@ -292,7 +294,7 @@ pub(super) fn start_game<'a>(
     prepared: Option<GameCpuResources>,
     client_applies: Vec<client_reload::PreparedClientReload>,
     entity_models: Option<Arc<horizon_client::mobs::EntityModelDocument>>,
-) -> Result<Option<Game<'a>>> {
+) -> Result<Option<Box<Game<'a>>>> {
     let handoff = prepared.is_some();
     let mut settings = match settings {
         Some(settings) => settings,
@@ -314,7 +316,7 @@ pub(super) fn start_game<'a>(
             entity_models.as_deref(),
         )?),
     };
-    let mut game = Game::new(res, pack, gui, options, settings, audio, prepared)?;
+    let mut game = Game::new_boxed(res, pack, gui, options, settings, audio, prepared)?;
     // `new DebugRenderer()` refreshes its list.
     game.refresh_debug_renderers();
     game.rest_loader = rest_loader;

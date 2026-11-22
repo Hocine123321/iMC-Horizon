@@ -90,6 +90,24 @@ impl Options {
     pub(super) fn is_client_start(&self) -> bool {
         self.execution_role.is_client() && !self.split_guest
     }
+    /// iMC (iOS, hold armed): reads the session file now, after Play. Same rules as the start's read; a
+    /// bad or missing file leaves the game offline. Does nothing when there is no file to read.
+    pub(super) fn apply_late_session(&mut self) {
+        let Some(path) = self.session_file.take().filter(|p| !p.is_empty()) else {
+            return;
+        };
+        if !std::path::Path::new(&path).exists() {
+            return;
+        }
+        match horizon_client::auth::AuthSession::load(path.as_ref()) {
+            Ok(session) => {
+                self.player_name = Some(session.name.clone());
+                horizon_client::auth::set_current(session);
+                horizon_client::auth::prepare_chat_keys(true);
+            }
+            Err(e) => eprintln!("Horizon: not signed in: {e}"),
+        }
+    }
     /// The name to join servers with: the one given, else the offline name kept
     /// next to options.txt (created on first use).
     pub(super) fn player_name(&self) -> String {
@@ -112,7 +130,11 @@ impl Options {
         }
         // The launcher's account: online-mode servers need it. A bad file
         // only leaves the game offline.
-        let session = if o.developer_single_player {
+        // iMC (iOS): with the hold armed the account is read after Play (`Options::apply_late_session`),
+        // because the launcher writes the file at Play and the engine refuses a file older than 2 minutes.
+        let session = if o.developer_single_player
+            || (horizon_client_input::ios_hold::armed() && o.session_file.is_some())
+        {
             Ok(None)
         } else if o.session_stdin {
             let mut text = String::new();
