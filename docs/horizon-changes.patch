@@ -1,9 +1,9 @@
 diff --git a/horizon/Cargo.lock b/horizon/Cargo.lock
-index 27b8369..1726e50 100644
+index 28374393..340cd5c9 100644
 --- a/horizon/Cargo.lock
 +++ b/horizon/Cargo.lock
-@@ -1796,6 +1796,15 @@ dependencies = [
- name = "horizon-hooks"
+@@ -2229,6 +2229,14 @@ dependencies = [
+ name = "horizon-internals"
  version = "0.1.0"
  
 +[[package]]
@@ -11,7 +11,6 @@ index 27b8369..1726e50 100644
 +version = "0.1.0"
 +dependencies = [
 + "horizon-client",
-+ "horizon-mods",
 + "horizon-threads",
 +]
 +
@@ -19,26 +18,27 @@ index 27b8369..1726e50 100644
  name = "horizon-items"
  version = "0.1.0"
 diff --git a/horizon/Cargo.toml b/horizon/Cargo.toml
-index 160336c..198d2e9 100644
+index f7c2dc27..0d69f41f 100644
 --- a/horizon/Cargo.toml
 +++ b/horizon/Cargo.toml
-@@ -1,6 +1,8 @@
- [workspace]
- exclude = ["launcher", "crates/horizon-telemetry-server", "crates/horizon-mod-registry", "third_party/wgpu-hal", "third_party/naga", "third_party/libmimalloc-sys"]
- members = [
+@@ -11,7 +11,8 @@ members = [
+     "crates/horizon-game",
+     "crates/horizon-official",
+     "crates/horizon-heartbeat",
+-
 +    # The iOS app's static library (platform/ios-bridge): one C entry point into horizon-client.
 +    "platform/ios-bridge",
-     "crates/horizon-addresses",
      "crates/horizon-core",
-     "crates/horizon-dualsense",
+     "crates/horizon-platform",
+     "crates/horizon-addresses",
 diff --git a/horizon/crates/horizon-client-input/Cargo.toml b/horizon/crates/horizon-client-input/Cargo.toml
-index 4454e94..36a89a8 100644
+index 89975fa6..03f34f63 100644
 --- a/horizon/crates/horizon-client-input/Cargo.toml
 +++ b/horizon/crates/horizon-client-input/Cargo.toml
-@@ -10,12 +10,16 @@ description = "The client's input layer: key bindings and their names, mouse, co
- horizon-client-core = { path = "../horizon-client-core" }
- winit = "0.30.13"
+@@ -15,12 +15,16 @@ winit = "0.30.13"
+ log = "0.4"
  png = "0.18"
+ [target.'cfg(not(target_os = "android"))'.dependencies]
 -arboard = { version = "3.6.1", default-features = false, features = ["wayland-data-control"] }
 +arboard = { version = "3.6.1", default-features = false }
  
@@ -55,7 +55,7 @@ index 4454e94..36a89a8 100644
  
 diff --git a/horizon/crates/horizon-client-input/src/auto_performance.rs b/horizon/crates/horizon-client-input/src/auto_performance.rs
 new file mode 100644
-index 0000000..59755b9
+index 00000000..59755b9d
 --- /dev/null
 +++ b/horizon/crates/horizon-client-input/src/auto_performance.rs
 @@ -0,0 +1,510 @@
@@ -571,7 +571,7 @@ index 0000000..59755b9
 +}
 diff --git a/horizon/crates/horizon-client-input/src/frame_probe.rs b/horizon/crates/horizon-client-input/src/frame_probe.rs
 new file mode 100644
-index 0000000..d033f59
+index 00000000..d033f595
 --- /dev/null
 +++ b/horizon/crates/horizon-client-input/src/frame_probe.rs
 @@ -0,0 +1,107 @@
@@ -683,7 +683,7 @@ index 0000000..d033f59
 +    }
 +}
 diff --git a/horizon/crates/horizon-client-input/src/gamepad.rs b/horizon/crates/horizon-client-input/src/gamepad.rs
-index 02f755f..ae8af65 100644
+index 1fc4739a..10f3d513 100644
 --- a/horizon/crates/horizon-client-input/src/gamepad.rs
 +++ b/horizon/crates/horizon-client-input/src/gamepad.rs
 @@ -115,6 +115,18 @@ impl PadState {
@@ -705,7 +705,7 @@ index 02f755f..ae8af65 100644
      pub fn held(&self, button: Button) -> bool {
          self.buttons & button.bit() != 0
      }
-@@ -2681,3 +2693,52 @@ bind_key.hotbar.2:north
+@@ -2844,3 +2856,52 @@ bind_key.hotbar.2:north
          assert_eq!(GlyphStyle::of_device(Some(0x0f0d), None), GlyphStyle::Xbox);
      }
  }
@@ -760,7 +760,7 @@ index 02f755f..ae8af65 100644
 +}
 diff --git a/horizon/crates/horizon-client-input/src/imc_settings.rs b/horizon/crates/horizon-client-input/src/imc_settings.rs
 new file mode 100644
-index 0000000..341ec59
+index 00000000..341ec59a
 --- /dev/null
 +++ b/horizon/crates/horizon-client-input/src/imc_settings.rs
 @@ -0,0 +1,1222 @@
@@ -1988,7 +1988,7 @@ index 0000000..341ec59
 +}
 diff --git a/horizon/crates/horizon-client-input/src/ios_hold.rs b/horizon/crates/horizon-client-input/src/ios_hold.rs
 new file mode 100644
-index 0000000..66b2f67
+index 00000000..66b2f672
 --- /dev/null
 +++ b/horizon/crates/horizon-client-input/src/ios_hold.rs
 @@ -0,0 +1,342 @@
@@ -2335,18 +2335,18 @@ index 0000000..66b2f67
 +    }
 +}
 diff --git a/horizon/crates/horizon-client-input/src/keybinds.rs b/horizon/crates/horizon-client-input/src/keybinds.rs
-index 215d8bb..3395998 100644
+index c2ceb0f1..a2f41c11 100644
 --- a/horizon/crates/horizon-client-input/src/keybinds.rs
 +++ b/horizon/crates/horizon-client-input/src/keybinds.rs
-@@ -300,6 +300,7 @@ pub use horizon_client_core::key_display::display_name;
- /// Q key shows A.
+@@ -304,6 +304,7 @@ pub use horizon_client_core::key_display::{
+ #[cfg(not(target_os = "android"))]
  pub fn learn_layout(event: &winit::event::KeyEvent) {
      use winit::keyboard::{Key, PhysicalKey};
 +    #[cfg(not(any(target_os = "ios", target_os = "android")))]
      use winit::platform::modifier_supplement::KeyEventExtModifierSupplement;
      let PhysicalKey::Code(code) = event.physical_key else {
          return;
-@@ -308,7 +309,14 @@ pub fn learn_layout(event: &winit::event::KeyEvent) {
+@@ -312,7 +313,14 @@ pub fn learn_layout(event: &winit::event::KeyEvent) {
          return;
      };
      let learn = horizon_client_core::key_display::learn_layout;
@@ -2363,10 +2363,10 @@ index 215d8bb..3395998 100644
          Key::Dead(Some(c)) => learn(name, c.encode_utf8(&mut [0; 4])),
          _ => {}
 diff --git a/horizon/crates/horizon-client-input/src/lib.rs b/horizon/crates/horizon-client-input/src/lib.rs
-index aa14353..0784f7c 100644
+index ff26ae1b..f448d625 100644
 --- a/horizon/crates/horizon-client-input/src/lib.rs
 +++ b/horizon/crates/horizon-client-input/src/lib.rs
-@@ -4,11 +4,15 @@
+@@ -4,12 +4,16 @@
  //! (`horizon_client::keybinds`, ...).
  #![forbid(unsafe_code)]
  pub mod actions;
@@ -2377,12 +2377,13 @@ index aa14353..0784f7c 100644
  pub mod held;
 +pub mod imc_settings;
  pub mod input;
+ pub mod input_queue;
 +pub mod frame_probe;
 +pub mod ios_hold;
  pub mod input_source;
  pub mod interaction_input;
  pub mod key_names;
-@@ -18,4 +22,10 @@ pub mod modifiers;
+@@ -19,4 +23,10 @@ pub mod modifiers;
  pub mod mouse;
  pub mod radial;
  pub mod snap;
@@ -2395,7 +2396,7 @@ index aa14353..0784f7c 100644
  pub mod window;
 diff --git a/horizon/crates/horizon-client-input/src/touch.rs b/horizon/crates/horizon-client-input/src/touch.rs
 new file mode 100644
-index 0000000..df4359e
+index 00000000..df4359e2
 --- /dev/null
 +++ b/horizon/crates/horizon-client-input/src/touch.rs
 @@ -0,0 +1,1264 @@
@@ -3665,7 +3666,7 @@ index 0000000..df4359e
 +}
 diff --git a/horizon/crates/horizon-client-input/src/touch_calibration.rs b/horizon/crates/horizon-client-input/src/touch_calibration.rs
 new file mode 100644
-index 0000000..8a0fa97
+index 00000000..8a0fa97c
 --- /dev/null
 +++ b/horizon/crates/horizon-client-input/src/touch_calibration.rs
 @@ -0,0 +1,260 @@
@@ -3931,7 +3932,7 @@ index 0000000..8a0fa97
 +}
 diff --git a/horizon/crates/horizon-client-input/src/touch_cursor.rs b/horizon/crates/horizon-client-input/src/touch_cursor.rs
 new file mode 100644
-index 0000000..0e9b232
+index 00000000..0e9b2328
 --- /dev/null
 +++ b/horizon/crates/horizon-client-input/src/touch_cursor.rs
 @@ -0,0 +1,837 @@
@@ -4774,7 +4775,7 @@ index 0000000..0e9b232
 +}
 diff --git a/horizon/crates/horizon-client-input/src/touch_editor_tools.rs b/horizon/crates/horizon-client-input/src/touch_editor_tools.rs
 new file mode 100644
-index 0000000..73f07e8
+index 00000000..73f07e87
 --- /dev/null
 +++ b/horizon/crates/horizon-client-input/src/touch_editor_tools.rs
 @@ -0,0 +1,894 @@
@@ -5674,7 +5675,7 @@ index 0000000..73f07e8
 +}
 diff --git a/horizon/crates/horizon-client-input/src/touch_extras.rs b/horizon/crates/horizon-client-input/src/touch_extras.rs
 new file mode 100644
-index 0000000..420641c
+index 00000000..420641cf
 --- /dev/null
 +++ b/horizon/crates/horizon-client-input/src/touch_extras.rs
 @@ -0,0 +1,378 @@
@@ -6058,7 +6059,7 @@ index 0000000..420641c
 +}
 diff --git a/horizon/crates/horizon-client-input/src/touch_layout.rs b/horizon/crates/horizon-client-input/src/touch_layout.rs
 new file mode 100644
-index 0000000..7086586
+index 00000000..7086586b
 --- /dev/null
 +++ b/horizon/crates/horizon-client-input/src/touch_layout.rs
 @@ -0,0 +1,737 @@
@@ -6800,10 +6801,10 @@ index 0000000..7086586
 +    }
 +}
 diff --git a/horizon/crates/horizon-client-input/src/window.rs b/horizon/crates/horizon-client-input/src/window.rs
-index 4356e55..8bad557 100644
+index 2947a5ce..46bc5c62 100644
 --- a/horizon/crates/horizon-client-input/src/window.rs
 +++ b/horizon/crates/horizon-client-input/src/window.rs
-@@ -601,6 +601,13 @@ pub fn borderless_fullscreen(window: &winit::window::Window) -> winit::window::F
+@@ -619,6 +619,13 @@ pub fn borderless_fullscreen(window: &winit::window::Window) -> winit::window::F
      )
  }
  
@@ -6817,7 +6818,7 @@ index 4356e55..8bad557 100644
  /// A window created fullscreen that the system also marked maximized enters it again
  /// unmaximized ([`enter_fullscreen`]); only Windows does that.
  pub fn settle_created_fullscreen(window: &winit::window::Window, fullscreen: bool) {
-@@ -688,6 +695,19 @@ pub fn with_icon(attributes: winit::window::WindowAttributes) -> winit::window::
+@@ -709,6 +716,19 @@ pub fn with_icon(attributes: winit::window::WindowAttributes) -> winit::window::
      #[cfg(target_os = "windows")]
      let attributes =
          winit::platform::windows::WindowAttributesExtWindows::with_taskbar_icon(attributes, icon);
@@ -6837,9 +6838,9 @@ index 4356e55..8bad557 100644
      attributes
  }
  
-@@ -728,6 +748,15 @@ pub fn display(window: &winit::window::Window) -> Option<Display> {
- mod tests {
-     use super::*;
+@@ -788,6 +808,15 @@ mod tests {
+         );
+     }
  
 +    #[test]
 +    fn a_new_window_asks_for_its_size_except_on_ios() {
@@ -6854,10 +6855,10 @@ index 4356e55..8bad557 100644
      fn video_mode_round_trips_the_options_json() {
          let mode = VideoMode {
 diff --git a/horizon/crates/horizon-client-render/src/gfx.rs b/horizon/crates/horizon-client-render/src/gfx.rs
-index c1ef0f9..0d394e7 100644
+index 36c0da78..d7ecf503 100644
 --- a/horizon/crates/horizon-client-render/src/gfx.rs
 +++ b/horizon/crates/horizon-client-render/src/gfx.rs
-@@ -86,6 +86,20 @@ use section_fade::{
+@@ -283,6 +283,20 @@ use section_fade::{
  };
  pub use view::{View, ViewSet};
  
@@ -6878,47 +6879,16 @@ index c1ef0f9..0d394e7 100644
  /// Window.getAppropriateLineWidth, in framebuffer pixels.
  pub fn outline_width(width: u32) -> f32 {
      2.5f32.max(width as f32 / 1920.0 * 2.5)
-@@ -1988,7 +2002,7 @@ impl wgpu::rwh::HasDisplayHandle for WindowDisplay {
- /// OpenGL. Each is tried when the one before has no surface, adapter or device. A native
- /// crash in the driver can't be
- /// caught in the game; the launcher switches the setting to DirectX 12 after one at
--/// the renderer's start (#746). macOS has Metal only.
-+/// the renderer's start (#746). macOS and iOS have Metal only.
- fn backend_order(
-     api: GraphicsApi,
-     os: &str,
-@@ -1996,7 +2010,9 @@ fn backend_order(
-     wgpu_backend: bool,
- ) -> Vec<wgpu::Backends> {
-     use wgpu::Backends;
--    if os == "macos" || wgpu_backend {
-+    // `os` is a run-time string, so iOS needs naming here: left to the arms below it would be asked
-+    // for Vulkan and OpenGL, neither of which is built for it, and no backend would be tried.
-+    if os == "macos" || os == "ios" || wgpu_backend {
-         return vec![Backends::default()];
-     }
-     let windows = os == "windows";
-@@ -2497,9 +2513,9 @@ async fn open_dxc(
- const NO_GPU_DRIVER: &str = "No graphics driver with Vulkan, DirectX 12 or OpenGL found: Horizon needs \
-      a GPU driver with one of them. Install the latest driver for your NVIDIA, AMD or Intel GPU and \
-      start the game again";
--#[cfg(target_os = "macos")]
-+#[cfg(target_vendor = "apple")]
- const NO_GPU_DRIVER: &str = "No Metal graphics device found";
--#[cfg(not(any(target_os = "windows", target_os = "macos")))]
-+#[cfg(not(any(target_os = "windows", target_vendor = "apple")))]
- const NO_GPU_DRIVER: &str = "No Vulkan or OpenGL graphics driver found: Horizon needs the Vulkan loader \
-      (libvulkan.so.1) and a Vulkan driver for your GPU (Mesa's, or NVIDIA's), or OpenGL through EGL";
- /// Logs a step of the renderer's start, for a native crash in the graphics
-@@ -13248,6 +13264,7 @@ mod tests {
+@@ -12613,6 +12627,8 @@ mod tests {
                  [Backends::default()]
              );
              assert_eq!(order(api, "macos", "aarch64"), [Backends::default()]);
 +            assert_eq!(order(api, "ios", "aarch64"), [Backends::default()]);
++            assert_eq!(order(api, "ios", "aarch64"), [Backends::default()]);
          }
      }
      #[test]
-@@ -13277,9 +13294,9 @@ mod tests {
+@@ -12643,9 +12659,9 @@ mod tests {
              search(GraphicsApi::OpenGl, "linux", "x86_64"),
              [(vec![g], false), (vec![v], false), (vec![g], true)]
          );
@@ -6930,11 +6900,47 @@ index c1ef0f9..0d394e7 100644
              assert_eq!(
                  device_search(GraphicsApi::Vulkan, os, "x86_64", env),
                  [(vec![all], false), (vec![all], true)]
+diff --git a/horizon/crates/horizon-client-render/src/gfx/device.rs b/horizon/crates/horizon-client-render/src/gfx/device.rs
+index fa008042..f8f3d69e 100644
+--- a/horizon/crates/horizon-client-render/src/gfx/device.rs
++++ b/horizon/crates/horizon-client-render/src/gfx/device.rs
+@@ -84,7 +84,7 @@ impl wgpu::rwh::HasDisplayHandle for WindowDisplay {
+ /// OpenGL. Each is tried when the one before has no surface, adapter or device. A native
+ /// crash in the driver can't be caught in the game; the launcher switches the setting to
+ /// DirectX 12 after one at the renderer's start on Vulkan (#746) or, on Windows, OpenGL
+-/// (#18291). macOS has Metal only.
++/// (#18291). macOS and iOS have Metal only.
+ pub(crate) fn backend_order(
+     api: GraphicsApi,
+     os: &str,
+@@ -92,7 +92,9 @@ pub(crate) fn backend_order(
+     wgpu_backend: bool,
+ ) -> Vec<wgpu::Backends> {
+     use wgpu::Backends;
+-    if os == "macos" || wgpu_backend {
++    // `os` is a run-time string, so iOS needs naming here: left to the arms below it would be asked
++    // for Vulkan and OpenGL, neither of which is built for it, and no backend would be tried.
++    if os == "macos" || os == "ios" || wgpu_backend {
+         return vec![Backends::default()];
+     }
+     let windows = os == "windows";
+@@ -705,9 +707,9 @@ async fn open_dxc(
+ const NO_GPU_DRIVER: &str = "No graphics driver with Vulkan, DirectX 12 or OpenGL found: Horizon needs \
+      a GPU driver with one of them. Install the latest driver for your NVIDIA, AMD or Intel GPU and \
+      start the game again";
+-#[cfg(target_os = "macos")]
++#[cfg(target_vendor = "apple")]
+ const NO_GPU_DRIVER: &str = "No Metal graphics device found";
+-#[cfg(not(any(target_os = "windows", target_os = "macos")))]
++#[cfg(not(any(target_os = "windows", target_vendor = "apple")))]
+ const NO_GPU_DRIVER: &str = "No Vulkan or OpenGL graphics driver found: Horizon needs the Vulkan loader \
+      (libvulkan.so.1) and a Vulkan driver for your GPU (Mesa's, or NVIDIA's), or OpenGL through EGL";
+ #[cfg(test)]
 diff --git a/horizon/crates/horizon-client-render/src/gfx/flat.rs b/horizon/crates/horizon-client-render/src/gfx/flat.rs
-index 8c460a3..d1482fa 100644
+index dcbde25a..3f025988 100644
 --- a/horizon/crates/horizon-client-render/src/gfx/flat.rs
 +++ b/horizon/crates/horizon-client-render/src/gfx/flat.rs
-@@ -269,13 +269,20 @@ pub fn is_broken_intel_vulkan(info: &wgpu::AdapterInfo) -> bool {
+@@ -270,13 +270,20 @@ pub fn is_broken_intel_vulkan(info: &wgpu::AdapterInfo) -> bool {
  }
  
  fn supported(adapter: &wgpu::Adapter, device: &wgpu::Device) -> bool {
@@ -6957,7 +6963,7 @@ index 8c460a3..d1482fa 100644
  fn storage(binding: u32, stage: wgpu::ShaderStages, read_only: bool) -> wgpu::BindGroupLayoutEntry {
      wgpu::BindGroupLayoutEntry {
          binding,
-@@ -1159,6 +1166,18 @@ impl Flat {
+@@ -1200,6 +1207,18 @@ impl Flat {
  mod tests {
      use super::*;
  
@@ -6977,11 +6983,11 @@ index 8c460a3..d1482fa 100644
      fn adreno_draws_flat_under_dx12_only() {
          let mut info = wgpu::AdapterInfo {
 diff --git a/horizon/crates/horizon-client-render/src/gfx/surface_setup.rs b/horizon/crates/horizon-client-render/src/gfx/surface_setup.rs
-index 6bf9e1c..01f7511 100644
+index 9a1482ce..a3cb991d 100644
 --- a/horizon/crates/horizon-client-render/src/gfx/surface_setup.rs
 +++ b/horizon/crates/horizon-client-render/src/gfx/surface_setup.rs
-@@ -174,12 +174,12 @@ pub(super) async fn open_adapter(
-         experimental_features: ray_query::experimental(features),
+@@ -198,12 +198,12 @@ pub(super) async fn open_adapter(
+         experimental_features: mesh_shader::experimental(features),
          ..Default::default()
      };
 -    #[cfg(not(target_os = "macos"))]
@@ -6996,7 +7002,7 @@ index 6bf9e1c..01f7511 100644
      let opened = match opened {
          Some(opened) => opened,
 diff --git a/horizon/crates/horizon-client-render/src/graphics.rs b/horizon/crates/horizon-client-render/src/graphics.rs
-index 472e577..962056f 100644
+index 75e8e730..c0636b72 100644
 --- a/horizon/crates/horizon-client-render/src/graphics.rs
 +++ b/horizon/crates/horizon-client-render/src/graphics.rs
 @@ -279,7 +279,7 @@ impl GraphicsApi {
@@ -7017,7 +7023,7 @@ index 472e577..962056f 100644
              &MACOS
          } else {
              &LINUX
-@@ -1442,7 +1442,7 @@ mod tests {
+@@ -1537,7 +1537,7 @@ mod tests {
          let choices = GraphicsApi::choices();
          if cfg!(windows) {
              assert_eq!(choices, GraphicsApi::ALL);
@@ -7027,7 +7033,7 @@ index 472e577..962056f 100644
          } else {
              assert_eq!(
 diff --git a/horizon/crates/horizon-client-render/src/graphics_ui.rs b/horizon/crates/horizon-client-render/src/graphics_ui.rs
-index a6aca0a..364358c 100644
+index 8d1a371b..df2db356 100644
 --- a/horizon/crates/horizon-client-render/src/graphics_ui.rs
 +++ b/horizon/crates/horizon-client-render/src/graphics_ui.rs
 @@ -33,15 +33,24 @@ pub enum Page {
@@ -7186,7 +7192,7 @@ index a6aca0a..364358c 100644
  /// Every page's settings, in named groups of related rows.
  pub fn rows() -> Vec<(Page, Vec<(&'static str, Vec<Setting>)>)> {
      use Cost::*;
-@@ -642,10 +753,81 @@ pub fn rows() -> Vec<(Page, Vec<(&'static str, Vec<Setting>)>)> {
+@@ -647,6 +758,77 @@ pub fn rows() -> Vec<(Page, Vec<(&'static str, Vec<Setting>)>)> {
                  ),
              ],
          ),
@@ -7262,6 +7268,10 @@ index a6aca0a..364358c 100644
 +            },
 +        ),
      ];
+     // The fork forces ticking serial, so Parallel Tick would be a no-op setting.
+     for (_, groups) in &mut pages {
+@@ -656,7 +838,7 @@ pub fn rows() -> Vec<(Page, Vec<(&'static str, Vec<Setting>)>)> {
+     }
      // Only Windows and Linux have more than one graphics API, translucent batching (Metal
      // draws flat) and GPU culling (Metal draws no count the GPU wrote).
 -    if cfg!(target_os = "macos") {
@@ -7269,7 +7279,7 @@ index a6aca0a..364358c 100644
          for (_, groups) in &mut pages {
              for (_, rows) in groups {
                  rows.retain(|r| {
-@@ -1144,6 +1326,26 @@ impl Item {
+@@ -1182,6 +1364,26 @@ impl Item {
          if !self.available() {
              return Some("This feature is not yet available in Horizon.");
          }
@@ -7295,10 +7305,10 @@ index a6aca0a..364358c 100644
 +        }
          match self {
              Item::Horizon(
-                 H::HdrCalibrate
-@@ -1195,7 +1397,10 @@ impl Item {
-     fn steps(self, s: &Settings, out: &EffectiveOutput) -> bool {
-         self.switch(s, out).is_none()
+                 H::Hdr
+@@ -1254,7 +1456,10 @@ impl Item {
+     fn steps(self, s: &Settings) -> bool {
+         self.switch(s).is_none()
              && self.slider(s).is_none()
 -            && !matches!(self, Item::Horizon(H::HdrCalibrate | H::ShaderPacks))
 +            && !matches!(
@@ -7307,8 +7317,8 @@ index a6aca0a..364358c 100644
 +            )
      }
      /// On/off settings and their value.
-     pub fn switch(self, s: &Settings, out: &EffectiveOutput) -> Option<bool> {
-@@ -1228,6 +1433,8 @@ impl Item {
+     pub fn switch(self, s: &Settings) -> Option<bool> {
+@@ -1283,6 +1488,8 @@ impl Item {
              }
              Item::Vanilla(Opt::Vsync) => s.vsync,
              Item::Extra(e) => return e.switch(&s.extras),
@@ -7317,7 +7327,7 @@ index a6aca0a..364358c 100644
              Item::Vanilla(Opt::Fullscreen) => s.fullscreen,
              Item::Vanilla(Opt::ExclusiveFullscreen) => s.file.bool("exclusiveFullscreen"),
              Item::Vanilla(Opt::SmoothLighting) => s.smooth_lighting,
-@@ -1243,7 +1450,7 @@ impl Item {
+@@ -1298,7 +1505,7 @@ impl Item {
          match self {
              Item::Vanilla(o) => o.slider_position(s),
              Item::Horizon(h) => h.slider(s),
@@ -7326,7 +7336,7 @@ index a6aca0a..364358c 100644
          }
      }
      pub fn label(self, s: &Settings, out: &EffectiveOutput) -> Text {
-@@ -1261,6 +1468,21 @@ impl Item {
+@@ -1316,6 +1523,21 @@ impl Item {
                  Text::literal(e.caption_text()),
                  Text::literal(e.value(&s.extras)),
              ),
@@ -7348,7 +7358,7 @@ index a6aca0a..364358c 100644
          }
      }
      pub fn set_slider(self, s: &mut Settings, v: f32, out: &EffectiveOutput) {
-@@ -1271,7 +1493,7 @@ impl Item {
+@@ -1326,7 +1548,7 @@ impl Item {
              // Options.applyGraphicsPreset, as Video Settings' slider does it.
              Item::Vanilla(o) => crate::options_ui::set_slider(o, s, v),
              Item::Horizon(h) => h.set_slider(s, v),
@@ -7357,7 +7367,7 @@ index a6aca0a..364358c 100644
          }
          self.touched(s);
      }
-@@ -1283,6 +1505,8 @@ impl Item {
+@@ -1338,6 +1560,8 @@ impl Item {
              Item::Vanilla(o) => o.cycle(s, back, framebuffer),
              Item::Horizon(h) => h.cycle(s, back, out),
              Item::Extra(e) => e.cycle(&mut s.extras, back),
@@ -7366,7 +7376,7 @@ index a6aca0a..364358c 100644
          }
          self.touched(s);
      }
-@@ -1291,6 +1515,8 @@ impl Item {
+@@ -1346,6 +1570,8 @@ impl Item {
          let presetless = matches!(
              self,
              Item::Extra(_)
@@ -7375,7 +7385,7 @@ index a6aca0a..364358c 100644
                  | Item::Horizon(
                      H::Preset
                          | H::BlueMapAutoDetect
-@@ -1332,7 +1558,7 @@ impl Item {
+@@ -1387,7 +1613,7 @@ impl Item {
          match self {
              Item::Vanilla(o) => o.slider_steps(),
              Item::Horizon(h) => h.slider_steps(),
@@ -7384,7 +7394,7 @@ index a6aca0a..364358c 100644
          }
      }
      pub fn step_slider(self, s: &mut Settings, forward: bool, width: f32, out: &EffectiveOutput) {
-@@ -1361,6 +1587,19 @@ fn parts(item: Item, s: &Settings, out: &EffectiveOutput) -> (String, Option<Str
+@@ -1416,6 +1642,19 @@ fn parts(item: Item, s: &Settings, out: &EffectiveOutput) -> (String, Option<Str
      shell::name_and_value(&item.label(s, out).plain())
  }
  
@@ -7404,8 +7414,8 @@ index a6aca0a..364358c 100644
  /// A setting's row: its control, what it does (and what its chosen value does), what it costs,
  /// and why it can't be used now.
  fn row(setting: Setting, s: &Settings, out: &EffectiveOutput) -> Row<Item> {
-@@ -1449,6 +1688,10 @@ pub struct GraphicsScreen {
-     /// The output of the renderer the settings are drawn for (`OptionsUi::draw`), handed in
+@@ -1505,6 +1744,10 @@ pub struct GraphicsScreen {
+     /// The output of the renderer the settings are drawn for (`OptionsUi::draw_background`), handed in
      /// each time the screen is reached.
      pub(crate) output: EffectiveOutput,
 +    /// iMC: the screen is open as the Controls page's touch settings (`Page::Touch` alone), not as
@@ -7415,16 +7425,22 @@ index a6aca0a..364358c 100644
  }
  
  impl Screen for GraphicsScreen {
-@@ -1466,7 +1709,7 @@ impl Screen for GraphicsScreen {
+@@ -1522,7 +1765,13 @@ impl Screen for GraphicsScreen {
              g::gpu_culling_offer(),
              g::reduced_far_detail_suggested(),
          );
--        shell::stamp_of(&(read(s), s.fullbright_held, offers))
-+        shell::stamp_of(&(read(s), s.fullbright_held, offers, self.touch_view))
+-        shell::stamp_of(&(read(s), s.fullbright_held, &s.running_pack, offers))
++        shell::stamp_of(&(
++            read(s),
++            s.fullbright_held,
++            &s.running_pack,
++            offers,
++            self.touch_view,
++        ))
      }
      fn sheets(&self, s: &Settings) -> Vec<Sheet<Page, Item>> {
          let sheet = |(page, groups): (Page, Vec<(&'static str, Vec<Setting>)>)| Sheet {
-@@ -1487,7 +1730,13 @@ impl Screen for GraphicsScreen {
+@@ -1544,7 +1793,13 @@ impl Screen for GraphicsScreen {
              listed: true,
              heading: None,
          };
@@ -7439,7 +7455,7 @@ index a6aca0a..364358c 100644
      }
      fn press(&mut self, s: &mut Settings, item: Item, back: bool) -> Vec<Output> {
          match item {
-@@ -1506,6 +1755,24 @@ impl Screen for GraphicsScreen {
+@@ -1563,6 +1818,24 @@ impl Screen for GraphicsScreen {
                      Output::Push(OptionsPage::ShaderPacks),
                  ]
              }
@@ -7464,7 +7480,7 @@ index a6aca0a..364358c 100644
              _ => {
                  item.cycle(s, back, self.framebuffer, &self.output);
                  vec![Output::Event(Event::Changed)]
-@@ -1735,7 +2002,7 @@ mod tests {
+@@ -1792,7 +2065,7 @@ mod tests {
              false,
              false,
          );
@@ -7473,9 +7489,9 @@ index a6aca0a..364358c 100644
      }
  
      #[test]
-@@ -1772,7 +2039,8 @@ mod tests {
-         ui.set_search("horizon preset");
-         assert_eq!(ui.listed(&s, SIZE), [general(Item::Horizon(H::Preset))]);
+@@ -1834,7 +2107,8 @@ mod tests {
+             [general(Item::Vanilla(Opt::FovEffects))]
+         );
          ui.set_search("hdr");
 -        let [x, y, w, h] = cols.page(Page::ALL.len() - 1);
 +        let hdr = Page::ALL.iter().position(|p| *p == Page::Hdr).unwrap();
@@ -7483,7 +7499,7 @@ index a6aca0a..364358c 100644
          press(&mut ui, &mut s, (x + w / 2.0, y + h / 2.0));
          assert_eq!(ui.current_page(&s, SIZE), Some(Page::Hdr));
          let [x, y, ..] = cols.clear();
-@@ -1987,7 +2255,7 @@ mod tests {
+@@ -2049,7 +2323,7 @@ mod tests {
          // Up from Done: the page list's last page.
          ui.set_focus(Some(Target::Done));
          key(&mut ui, &mut s, K::ArrowUp);
@@ -7492,7 +7508,7 @@ index a6aca0a..364358c 100644
          // Its row wheeled far out of view: Down takes the first row in view, as it is.
          focus_on(&mut ui, Item::Horizon(H::Preset));
          ui.scroll(&s, SIZE, -1000.0);
-@@ -2094,6 +2362,7 @@ mod tests {
+@@ -2156,6 +2430,7 @@ mod tests {
          let mut screen = GraphicsScreen {
              framebuffer: FB,
              output: NONE,
@@ -7500,7 +7516,7 @@ index a6aca0a..364358c 100644
          };
          let default = Settings::default();
          for (_, item) in items() {
-@@ -2514,7 +2783,7 @@ mod tests {
+@@ -2583,7 +2858,7 @@ mod tests {
              .into_iter()
              .find(|(_, i)| *i == item)
              .map(|(p, _)| p);
@@ -7509,7 +7525,7 @@ index a6aca0a..364358c 100644
              // Metal draws flat: never offered, so not shown.
              assert_eq!(page, None);
              return;
-@@ -2560,7 +2829,7 @@ mod tests {
+@@ -2629,7 +2904,7 @@ mod tests {
          use crate::graphics::GpuCullingOffer;
          let item = Item::Horizon(H::GpuCulling);
          let at = |item| items().into_iter().position(|(_, i)| i == item);
@@ -7519,10 +7535,10 @@ index a6aca0a..364358c 100644
              assert_eq!(at(item), None);
              return;
 diff --git a/horizon/crates/horizon-client-render/src/graphics_ui_hdr_tests.rs b/horizon/crates/horizon-client-render/src/graphics_ui_hdr_tests.rs
-index 3952a49..aca526e 100644
+index 2398e85b..28fa7678 100644
 --- a/horizon/crates/horizon-client-render/src/graphics_ui_hdr_tests.rs
 +++ b/horizon/crates/horizon-client-render/src/graphics_ui_hdr_tests.rs
-@@ -326,6 +326,7 @@ fn undo_never_restores_a_held_hdr_start() {
+@@ -432,6 +432,7 @@ fn undo_never_restores_a_held_hdr_start() {
      let mut screen = GraphicsScreen {
          framebuffer: FB,
          output: NONE,
@@ -7532,7 +7548,7 @@ index 3952a49..aca526e 100644
      opened.horizon.hdr = HdrMode::Auto;
 diff --git a/horizon/crates/horizon-client-render/src/ios_unused.rs b/horizon/crates/horizon-client-render/src/ios_unused.rs
 new file mode 100644
-index 0000000..8223117
+index 00000000..8223117d
 --- /dev/null
 +++ b/horizon/crates/horizon-client-render/src/ios_unused.rs
 @@ -0,0 +1,271 @@
@@ -7808,10 +7824,10 @@ index 0000000..8223117
 +    }
 +}
 diff --git a/horizon/crates/horizon-client-render/src/lib.rs b/horizon/crates/horizon-client-render/src/lib.rs
-index fd4acea..1d79014 100644
+index 24735806..4670eda3 100644
 --- a/horizon/crates/horizon-client-render/src/lib.rs
 +++ b/horizon/crates/horizon-client-render/src/lib.rs
-@@ -57,6 +57,8 @@ pub mod gfx;
+@@ -58,6 +58,8 @@ pub mod gfx;
  pub mod graphics;
  pub mod graphics_style;
  pub mod graphics_ui;
@@ -7820,23 +7836,9 @@ index fd4acea..1d79014 100644
  pub mod hdr_calibration;
  pub mod hud;
  pub mod hud_kit;
-diff --git a/horizon/crates/horizon-client-render/src/logging.rs b/horizon/crates/horizon-client-render/src/logging.rs
-index 17d1021..582087f 100644
---- a/horizon/crates/horizon-client-render/src/logging.rs
-+++ b/horizon/crates/horizon-client-render/src/logging.rs
-@@ -39,7 +39,8 @@ pub fn data_dir() -> PathBuf {
-         if let Some(d) = env("APPDATA") {
-             return d;
-         }
--    } else if cfg!(target_os = "macos") {
-+    } else if cfg!(target_vendor = "apple") {
-+        // macOS, and an iOS app's container (where `HOME` points).
-         if let Some(h) = &home {
-             return h.join("Library/Application Support");
-         }
 diff --git a/horizon/crates/horizon-client-render/src/mobile_preset.rs b/horizon/crates/horizon-client-render/src/mobile_preset.rs
 new file mode 100644
-index 0000000..ba273a4
+index 00000000..ba273a4a
 --- /dev/null
 +++ b/horizon/crates/horizon-client-render/src/mobile_preset.rs
 @@ -0,0 +1,253 @@
@@ -8094,10 +8096,10 @@ index 0000000..ba273a4
 +    }
 +}
 diff --git a/horizon/crates/horizon-client-render/src/options_ui.rs b/horizon/crates/horizon-client-render/src/options_ui.rs
-index 1a8f14d..2b46396 100644
+index 2d77a9f4..93a45524 100644
 --- a/horizon/crates/horizon-client-render/src/options_ui.rs
 +++ b/horizon/crates/horizon-client-render/src/options_ui.rs
-@@ -1262,6 +1262,12 @@ pub enum Page {
+@@ -1510,6 +1510,12 @@ pub enum Page {
      Graphics,
      GraphicsAdvanced,
      GraphicsHdr,
@@ -8110,7 +8112,7 @@ index 1a8f14d..2b46396 100644
      /// HDR calibration, full screen (`calibration`).
      HdrCalibration,
      /// Horizon's controller settings and button binds.
-@@ -1280,6 +1286,8 @@ pub enum Page {
+@@ -1528,6 +1534,8 @@ pub enum Page {
      /// Horizon Settings: every page Horizon adds, as a mod's settings
      /// screen hangs off vanilla's Options.
      Horizon,
@@ -8119,7 +8121,7 @@ index 1a8f14d..2b46396 100644
      /// Replay Studio: saved recordings browser and 3D video editor launcher.
      Studio,
      /// AI Agent: agent control on or off, whether an agent is connected, the connection details.
-@@ -1311,6 +1319,10 @@ pub(crate) enum Act {
+@@ -1558,6 +1566,10 @@ pub(crate) enum Act {
      PvpPreset,
      /// PvP & HUD's Edit HUD button.
      HudEditor,
@@ -8127,10 +8129,10 @@ index 1a8f14d..2b46396 100644
 +    TouchExtra(horizon_client_input::touch_extras::Extra),
 +    /// The extra buttons page: step Key 1 or Key 2 to the next key.
 +    TouchExtraKey(horizon_client_input::touch_extras::Extra),
-     /// The installed native mod's settings page.
-     ModSettings(usize),
      /// A native mod's key (mod, key) waits for a key; a button of its page.
-@@ -1480,6 +1492,10 @@ pub enum Event {
+     /// A key a native mod registered (mod, mapping) waits for a key, or is reset.
+     ModKey(usize, usize),
+@@ -1733,6 +1745,10 @@ pub enum Event {
      Credits,
      /// PvP & HUD's Edit HUD: open the HUD editor over the game.
      HudEditor,
@@ -8141,7 +8143,7 @@ index 1a8f14d..2b46396 100644
      /// Copy how an agent connects (the AI Agent page).
      CopyAgentDetails,
      /// The AI Agent page's recording button: start or stop.
-@@ -1607,6 +1623,8 @@ pub struct OptionsUi {
+@@ -1864,6 +1880,8 @@ pub struct OptionsUi {
      pub studio: crate::studio_ui::StudioUi,
      /// The AI Agent page's status lines (set by the game while it shows).
      pub agent_status: Vec<String>,
@@ -8150,7 +8152,7 @@ index 1a8f14d..2b46396 100644
      /// A repro recording is running: the AI Agent page's button says stop.
      pub agent_recording: bool,
      /// The Music page's groups (set by the game when it opens the page).
-@@ -1687,6 +1705,7 @@ impl Default for OptionsUi {
+@@ -1960,6 +1978,7 @@ impl Default for OptionsUi {
              split_setup: Default::default(),
              studio: Default::default(),
              agent_status: Vec::new(),
@@ -8158,7 +8160,7 @@ index 1a8f14d..2b46396 100644
              agent_recording: false,
              music_groups: Vec::new(),
              focus: None,
-@@ -1700,6 +1719,42 @@ impl Default for OptionsUi {
+@@ -1977,6 +1996,42 @@ impl Default for OptionsUi {
          }
      }
  }
@@ -8201,7 +8203,7 @@ index 1a8f14d..2b46396 100644
  fn option_widget(s: &Settings, opt: Opt, x: f32, y: f32, w: f32) -> Widget {
      // OptionsSubScreen.addContents: the narrator button is active only while
      // the narrator is (`narratorButton.active = narrator.isActive()`).
-@@ -1774,6 +1829,10 @@ enum Row {
+@@ -2051,6 +2106,10 @@ enum Row {
  /// A widget's tooltip (`setTooltip`), unwrapped: drawn while hovered, and
  /// its narration's hint.
  fn tooltip_text(s: &Settings, wd: &Widget) -> Option<Text> {
@@ -8212,7 +8214,7 @@ index 1a8f14d..2b46396 100644
      let WKind::Button { act, .. } = &wd.kind else {
          let WKind::Slider { opt, .. } = &wd.kind else {
              return None;
-@@ -1799,6 +1858,8 @@ fn tooltip_text(s: &Settings, wd: &Widget) -> Option<Text> {
+@@ -2076,6 +2135,8 @@ fn tooltip_text(s: &Settings, wd: &Widget) -> Option<Text> {
          Act::Push(Page::Accessibility) => Some("options.accessibility.tooltip".into()),
          Act::PvpPreset => Some("horizon.pvp.preset.tooltip".into()),
          Act::HudEditor => Some("horizon.pvp.editor.tooltip".into()),
@@ -8221,7 +8223,7 @@ index 1a8f14d..2b46396 100644
          _ => None,
      };
      if let Some(key) = key.filter(|key| lang::has(key)) {
-@@ -2103,6 +2164,8 @@ impl OptionsUi {
+@@ -2437,6 +2498,8 @@ impl OptionsUi {
              self.shader.show(at);
          }
          if let Some(at) = Self::graphics_page(page) {
@@ -8230,7 +8232,7 @@ index 1a8f14d..2b46396 100644
              self.graphics.show(at);
          }
          if let Some(at) = Self::controller_page(page) {
-@@ -2126,7 +2189,8 @@ impl OptionsUi {
+@@ -2460,7 +2523,8 @@ impl OptionsUi {
      /// Whether a video settings screen is open, Horizon's or vanilla's: the fullscreen mode
      /// waits for it to close, and Ctrl with the wheel steps the GUI scale.
      pub fn video_open(&self) -> bool {
@@ -8240,7 +8242,7 @@ index 1a8f14d..2b46396 100644
      }
      /// Where the graphics screen opens for `page`, if it is one of its pages.
      fn graphics_page(page: Page) -> Option<crate::graphics_ui::Page> {
-@@ -2134,6 +2198,8 @@ impl OptionsUi {
+@@ -2468,6 +2532,8 @@ impl OptionsUi {
              Page::Graphics => Some(crate::graphics_ui::Page::General),
              Page::GraphicsAdvanced => Some(crate::graphics_ui::Page::Advanced),
              Page::GraphicsHdr => Some(crate::graphics_ui::Page::Hdr),
@@ -8249,7 +8251,7 @@ index 1a8f14d..2b46396 100644
              _ => None,
          }
      }
-@@ -2160,15 +2226,19 @@ impl OptionsUi {
+@@ -2494,15 +2560,19 @@ impl OptionsUi {
              Page::ShaderPacks => "horizon.pages.shader_packs",
              Page::ShaderOptions => "horizon.pages.shader_options",
              Page::PackOptions => "horizon.pack.options.title",
@@ -8272,7 +8274,7 @@ index 1a8f14d..2b46396 100644
              Page::Credits => "credits_and_attribution.screen.title",
              Page::Horizon => "horizon.pages.settings",
              Page::Studio => "horizon.pages.studio",
-@@ -2441,6 +2511,41 @@ impl OptionsUi {
+@@ -2790,6 +2860,41 @@ impl OptionsUi {
                  rows
              }
              Page::Horizon => self.horizon_rows(s),
@@ -8314,7 +8316,7 @@ index 1a8f14d..2b46396 100644
              Page::Agent => {
                  let mut rows = vec![Row::Buttons(
                      self.extra_button(s, crate::extras::Item::AgentControl),
-@@ -2628,6 +2733,17 @@ impl OptionsUi {
+@@ -2977,6 +3082,17 @@ impl OptionsUi {
                      ),
                      None,
                  ));
@@ -8332,18 +8334,7 @@ index 1a8f14d..2b46396 100644
                  self.filter_option_rows(rows)
              }
              Page::Mouse => pairs(MOUSE_OPTIONS),
-@@ -3254,6 +3370,10 @@ impl OptionsUi {
-             {
-                 *active = self.in_world && self.minecart_improvements;
-             }
-+            // iMC Settings > Grey out unused settings: what an iPhone has no use for.
-+            if s.imc.grey_unused {
-+                grey_unused(s, widget);
-+            }
-         }
-         self.row_bands = rows
-             .bands
-@@ -3949,6 +4069,14 @@ impl OptionsUi {
+@@ -3451,6 +3567,14 @@ impl OptionsUi {
                                  events.push(Event::Changed);
                              }
                          }
@@ -8356,9 +8347,9 @@ index 1a8f14d..2b46396 100644
 +                            events.push(Event::Changed);
 +                        }
                          Act::PlayMusicTrack(event, track) => {
-                             events.push(Event::PlayMusicTrack(event, track));
+                             events.push(Event::PlayMusicTrack(event.clone(), track.clone()));
                          }
-@@ -4829,6 +4957,14 @@ impl OptionsUi {
+@@ -4502,6 +4626,14 @@ impl OptionsUi {
                                  events.push(Event::Changed);
                              }
                          }
@@ -8371,9 +8362,9 @@ index 1a8f14d..2b46396 100644
 +                            events.push(Event::Changed);
 +                        }
                          Act::PlayMusicTrack(event, track) => {
-                             events.push(Event::PlayMusicTrack(event, track));
+                             events.push(Event::PlayMusicTrack(event, track.clone()));
                          }
-@@ -7340,6 +7476,8 @@ mod tests {
+@@ -7729,6 +7861,8 @@ mod tests {
                      Item::Vanilla(o) => format!("{o:?}"),
                      Item::Horizon(h) => format!("graphics:{h:?}"),
                      Item::Extra(e) => format!("extra:{e:?}"),
@@ -8382,7 +8373,7 @@ index 1a8f14d..2b46396 100644
                  };
                  graphics_rows.insert(id.clone());
                  put(id, "Graphics");
-@@ -7363,6 +7501,8 @@ mod tests {
+@@ -7752,6 +7886,8 @@ mod tests {
                          Act::Cycle(opt) => format!("{opt:?}"),
                          Act::Extra(e) => format!("extra:{e:?}"),
                          Act::PvpPreset => "pvp-preset".to_owned(),
@@ -8391,7 +8382,7 @@ index 1a8f14d..2b46396 100644
                          Act::Push(to) => {
                              ways_in
                                  .entry(format!("{to:?}"))
-@@ -7428,8 +7568,8 @@ mod tests {
+@@ -7818,8 +7954,8 @@ mod tests {
                      Opt::GraphicsBackend => "graphics-api".to_owned(),
                      o => format!("{o:?}"),
                  };
@@ -8402,7 +8393,7 @@ index 1a8f14d..2b46396 100644
                      continue;
                  }
                  assert!(
-@@ -7506,6 +7646,96 @@ mod tests {
+@@ -7897,6 +8033,96 @@ mod tests {
          assert!(pushes(&mut ui).contains(&Page::Controller));
      }
  
@@ -8499,8 +8490,23 @@ index 1a8f14d..2b46396 100644
      #[test]
      fn sound_device_button_in_sound_page_and_cycles() {
          let mut s = Settings::default();
+diff --git a/horizon/crates/horizon-client-render/src/options_ui/layout.rs b/horizon/crates/horizon-client-render/src/options_ui/layout.rs
+index 5c8a6412..28b753dc 100644
+--- a/horizon/crates/horizon-client-render/src/options_ui/layout.rs
++++ b/horizon/crates/horizon-client-render/src/options_ui/layout.rs
+@@ -663,6 +663,10 @@ impl OptionsUi {
+             {
+                 *active = self.in_world && self.minecart_improvements;
+             }
++            // iMC Settings > Grey out unused settings: what an iPhone has no use for.
++            if s.imc.grey_unused {
++                super::grey_unused(s, widget);
++            }
+         }
+         self.row_bands = rows
+             .bands
 diff --git a/horizon/crates/horizon-client-render/src/options_ui_pages.rs b/horizon/crates/horizon-client-render/src/options_ui_pages.rs
-index 864dad1..5f9e2bf 100644
+index 4e221cdc..f6fbb8a0 100644
 --- a/horizon/crates/horizon-client-render/src/options_ui_pages.rs
 +++ b/horizon/crates/horizon-client-render/src/options_ui_pages.rs
 @@ -81,6 +81,8 @@ pub(super) fn horizon_page_tooltip(page: Page) -> Option<&'static str> {
@@ -8513,7 +8519,7 @@ index 864dad1..5f9e2bf 100644
          Page::SplitProfiles => "horizon.pages.split_profiles.tooltip",
          Page::ShaderPacks => "horizon.pages.shader_packs.tooltip",
 diff --git a/horizon/crates/horizon-client-render/src/settings.rs b/horizon/crates/horizon-client-render/src/settings.rs
-index bdd7292..852764c 100644
+index a64bdafb..d7bc0020 100644
 --- a/horizon/crates/horizon-client-render/src/settings.rs
 +++ b/horizon/crates/horizon-client-render/src/settings.rs
 @@ -210,6 +210,16 @@ pub struct Settings {
@@ -8533,7 +8539,7 @@ index bdd7292..852764c 100644
      /// The Horizon mods turned on (`horizon-mods.txt`), all off by default.
      pub mods: crate::mod_list::ModList,
      /// The packs in `shaderpacks/`, listed when the Shader Packs page opens; the pick is
-@@ -299,6 +309,11 @@ impl Default for Settings {
+@@ -302,6 +312,11 @@ impl Default for Settings {
              fullbright_held: false,
              controller: Default::default(),
              extras: Default::default(),
@@ -8545,7 +8551,7 @@ index bdd7292..852764c 100644
              mods: Default::default(),
              shader_packs: Vec::new(),
              shader_options: None,
-@@ -373,6 +388,41 @@ impl Settings {
+@@ -375,6 +390,41 @@ impl Settings {
              .and_then(|dir| fs::read_to_string(dir.join(crate::extras::FILE)).ok())
              .unwrap_or_default();
          let mut extras = crate::extras::Extras::parse(&extras_text);
@@ -8587,7 +8593,7 @@ index bdd7292..852764c 100644
          // The settings stores of the crates above the engine: their lines of this file, or of
          // their own (docs/layers.md, "Platform registries").
          horizon_hooks::settings::engine::load(&mut |file| match path.parent() {
-@@ -393,6 +443,11 @@ impl Settings {
+@@ -401,6 +451,11 @@ impl Settings {
                      horizon,
                      controller,
                      extras,
@@ -8597,9 +8603,9 @@ index bdd7292..852764c 100644
 +                    touch_extras,
 +                    touch_presets,
                      mods,
-                     ..Self::parse(&text)
+                     ..parsed
                  }
-@@ -401,6 +456,11 @@ impl Settings {
+@@ -409,6 +464,11 @@ impl Settings {
                  horizon,
                  controller,
                  extras,
@@ -8611,7 +8617,7 @@ index bdd7292..852764c 100644
                  mods,
                  ..Self::default()
              },
-@@ -521,6 +581,11 @@ impl Settings {
+@@ -542,6 +602,11 @@ impl Settings {
              fullbright_held: false,
              controller: Default::default(),
              extras: Default::default(),
@@ -8623,8 +8629,8 @@ index bdd7292..852764c 100644
              mods: Default::default(),
              shader_packs: Vec::new(),
              shader_options: None,
-@@ -686,6 +751,11 @@ impl Settings {
-             horizon: self.horizon.clone(),
+@@ -722,6 +787,11 @@ impl Settings {
+             horizon,
              controller: self.controller.clone(),
              extras: self.extras.clone(),
 +            imc: self.imc.clone(),
@@ -8634,8 +8640,8 @@ index bdd7292..852764c 100644
 +            touch_presets: self.touch_presets.clone(),
              mods: self.mods.clone(),
              video_modes: self.video_modes.clone(),
-             ..Self::from_file(file)
-@@ -709,6 +779,27 @@ impl Settings {
+             ..parsed
+@@ -746,6 +816,27 @@ impl Settings {
              let mut extras = self.extras.clone();
              extras.emote_key = self.keys.get("key.emote").to_owned();
              extras.save(dir);
@@ -8664,10 +8670,10 @@ index bdd7292..852764c 100644
              self.mods.save(&crate::logging::shared_dir(dir));
          }
 diff --git a/horizon/crates/horizon-client/assets/horizon/lang/en_us.json b/horizon/crates/horizon-client/assets/horizon/lang/en_us.json
-index 3e7595e..31269a3 100644
+index a73ff938..68b3a3d9 100644
 --- a/horizon/crates/horizon-client/assets/horizon/lang/en_us.json
 +++ b/horizon/crates/horizon-client/assets/horizon/lang/en_us.json
-@@ -275,6 +275,8 @@
+@@ -278,6 +278,8 @@
    "horizon.pages.open.graphics_advanced": "Advanced Graphics...",
    "horizon.pages.open.shader_packs": "Shader Packs...",
    "horizon.pages.open.controller": "Controller Settings...",
@@ -8676,7 +8682,7 @@ index 3e7595e..31269a3 100644
    "horizon.pages.open.split_setup": "Splitscreen...",
    "horizon.pages.open.extras": "Extras...",
    "horizon.pages.open.mods": "Mods...",
-@@ -871,6 +873,98 @@
+@@ -894,6 +896,98 @@
    "horizon.pages.pvp": "PvP & HUD",
    "horizon.pages.pvp.tooltip": "Crosshair, HUD and PvP settings, all off by default. Nothing here shows what vanilla doesn't.",
    "horizon.pages.open.pvp": "PvP & HUD...",
@@ -8775,7 +8781,7 @@ index 3e7595e..31269a3 100644
    "horizon.pvp.header.crosshair": "Crosshair",
    "horizon.pvp.crosshair": "Custom crosshair",
    "horizon.pvp.crosshair_shape": "Shape",
-@@ -1140,6 +1234,19 @@
+@@ -1166,6 +1260,19 @@
    "horizon.recipe_transfer.no_room": "Inventory full",
    "horizon.recipe_transfer.unavailable": "Recipe does not fit this menu",
    "horizon.recipe_transfer.unsupported": "Server requires a known recipe",
@@ -8796,16 +8802,17 @@ index 3e7595e..31269a3 100644
    "horizon.debug.pass_detail.inside_passes": "timestamps inside passes",
    "horizon.debug.pass_detail.separate_passes": "separate passes, adds GPU time",
 diff --git a/horizon/crates/horizon-client/src/client_lib.rs b/horizon/crates/horizon-client/src/client_lib.rs
-index cbe92a1..2fe8949 100644
+index f6796514..db3fe0f9 100644
 --- a/horizon/crates/horizon-client/src/client_lib.rs
 +++ b/horizon/crates/horizon-client/src/client_lib.rs
-@@ -175,10 +175,12 @@ pub use horizon_client_input::actions;
+@@ -213,11 +213,13 @@ pub use horizon_client_input::actions;
  pub use horizon_client_input::clipboard;
  pub use horizon_client_input::gamepad;
  pub use horizon_client_input::gameplay_guide;
 +pub use horizon_client_input::frame_probe;
  pub use horizon_client_input::held;
  pub use horizon_client_input::input;
+ pub use horizon_client_input::input_queue;
  pub use horizon_client_input::input_source;
  pub use horizon_client_input::interaction_input;
 +pub use horizon_client_input::ios_hold;
@@ -8813,51 +8820,28 @@ index cbe92a1..2fe8949 100644
  pub use horizon_client_input::keybinds;
  pub use horizon_client_input::keymapping;
 diff --git a/horizon/crates/horizon-client/src/game.rs b/horizon/crates/horizon-client/src/game.rs
-index 2004a92..c740af2 100644
+index 6442b028..583e0d85 100644
 --- a/horizon/crates/horizon-client/src/game.rs
 +++ b/horizon/crates/horizon-client/src/game.rs
-@@ -184,6 +184,9 @@ mod hand;
- mod headless;
- mod hit;
- mod hud_editor;
-+mod touch_calibration;
-+mod touch_cursor;
-+mod touch_editor;
- mod hud_room;
- mod ime;
- mod initial_spawn;
-@@ -468,9 +471,12 @@ mod test_instances;
- mod text_displays;
- mod tick_profile;
- mod tick_script;
-+mod auto_performance;
-+mod touch;
- mod titles;
- mod tnt;
- mod totem;
-+mod lifecycle;
- mod trading;
- mod transient_blocks;
- mod trial_spawner;
-@@ -606,7 +612,7 @@ pub use native_world_read::NativeBlockReadError;
- use resource_load::{Progress, launch_world, load_resources, named_scope, synchronous_startup};
+@@ -120,7 +120,7 @@ use loading_window::{
+ };
  use resource_loader::{
      EntityModels, GameCpuResources, Loaded, LoaderMsg, PendingWorldEntry, WorldRestLoader,
 -    run_loading, write_report,
 +    loading_app, run_loading, write_report,
  };
- use std::{
-     cell::RefCell,
-@@ -677,6 +683,8 @@ enum Screen {
+ use window_handler::ClientQuit;
+ // `Action` here is the title screen's buttons (`title::Action`).
+@@ -267,6 +267,8 @@ enum Screen {
      Mod,
-     /// PvP & HUD's widget editor (game/hud_editor.rs).
+     /// PvP & HUD's widget editor (game/interface/hud_editor.rs).
      HudEditor,
 +    /// iMC Settings' touch controls editor (game/touch_editor.rs).
 +    TouchEditor,
      /// Horizon Studio script screen (`studio_screen_open`): canvas draws
      /// itself, takes input through the screen hooks, does not draw chat.
      Studio,
-@@ -710,6 +718,7 @@ impl Screen {
+@@ -300,6 +302,7 @@ impl Screen {
              Screen::DebugOptions => "debug_options",
              Screen::Mod => "mod",
              Screen::HudEditor => "hud_editor",
@@ -8865,7 +8849,7 @@ index 2004a92..c740af2 100644
              Screen::Studio => "studio",
          }
      }
-@@ -2279,6 +2288,10 @@ struct Game<'a> {
+@@ -1116,6 +1119,10 @@ struct Game<'a> {
      focus_after_run: Option<bool>,
      /// Whether the window currently accepts input method events.
      ime_allowed: bool,
@@ -8876,7 +8860,7 @@ index 2004a92..c740af2 100644
      /// The candidate window's area last given to the window, in pixels.
      ime_area: Option<[i32; 4]>,
      /// When the window lost focus, while it is still without
-@@ -2524,6 +2537,14 @@ struct Game<'a> {
+@@ -1400,6 +1407,14 @@ struct Game<'a> {
      /// `MinecraftServer.ticksUntilAutosave`: the ticks left before the next
      /// autosave, counted down a tick at a time.
      ticks_until_autosave: i64,
@@ -8891,7 +8875,7 @@ index 2004a92..c740af2 100644
      applied_modifiers: Vec<(String, String)>,
      experience: Experience,
      orbs: horizon_client::join_seq::JoinList<ExperienceOrb>,
-@@ -5822,6 +5843,7 @@ impl Game<'_> {
+@@ -4659,6 +4674,7 @@ impl Game<'_> {
          self.frame_graph
              .draw(self.settings.horizon.overlay, &mut batch, &self.gui.atlas);
          self.draw_pad_over_hud(&mut batch);
@@ -8899,15 +8883,15 @@ index 2004a92..c740af2 100644
          batch
      }
      fn hud_layers(&mut self, size: [u32; 2]) -> HudBatch {
-@@ -6232,6 +6254,7 @@ impl Game<'_> {
+@@ -5104,6 +5120,7 @@ impl Game<'_> {
              Screen::BlockEditor => self.draw_block_editor(&mut batch),
              Screen::DebugOptions => self.draw_debug_options(&mut batch),
              Screen::HudEditor => self.draw_hud_editor(&mut batch),
 +            Screen::TouchEditor => self.draw_touch_editor(&mut batch),
-             Screen::Studio => {}
-             Screen::Inventory => {
-                 let from = batch.vertices.len();
-@@ -9802,6 +9825,11 @@ impl Game<'_> {
+             Screen::Studio => {
+                 self.draw_screen_phase(
+                     &mut batch,
+@@ -8814,6 +8831,11 @@ impl Game<'_> {
      /// it a handler both can call and a `gamepad::Route` (screenshot and fullscreen do this). A
      /// screen's own raw keys, text and mods' key hooks stay raw on purpose.
      fn handle_window_event_inner(&mut self, event_loop: &dyn EventLoopCtl, mut event: WindowEvent) {
@@ -8916,10 +8900,10 @@ index 2004a92..c740af2 100644
 +            self.touch_event(event_loop, touch);
 +            return;
 +        }
-         if let WindowEvent::Focused(false) = &event {
-             self.physical_keys.clear();
-             self.physical_buttons.clear();
-@@ -10268,6 +10296,9 @@ impl Game<'_> {
+         let pressed = match &event {
+             WindowEvent::KeyboardInput { event, .. } => {
+                 event.state == ElementState::Pressed && !event.repeat
+@@ -9307,6 +9329,9 @@ impl Game<'_> {
                          if self.screen == Screen::HudEditor {
                              self.hud_editor_drag();
                          }
@@ -8929,7 +8913,7 @@ index 2004a92..c740af2 100644
                          if self.screen == Screen::WorldOptions {
                              self.world_options_drag();
                          }
-@@ -10690,6 +10721,12 @@ impl Game<'_> {
+@@ -9726,6 +9751,12 @@ impl Game<'_> {
                          Screen::HudEditor if button == MouseButton::Left => {
                              self.hud_editor_release()
                          }
@@ -8942,7 +8926,7 @@ index 2004a92..c740af2 100644
                          Screen::ConfirmLink if pressed && button == MouseButton::Left => {
                              self.confirm_link_click()
                          }
-@@ -10792,6 +10829,16 @@ impl Game<'_> {
+@@ -9828,6 +9859,16 @@ impl Game<'_> {
                          } else {
                              self.keys.remove(&key);
                          }
@@ -8959,8 +8943,8 @@ index 2004a92..c740af2 100644
                      }
                  }
                  WindowEvent::KeyboardInput { event, .. } if self.sign_edit.is_some() => {
-@@ -11174,11 +11221,16 @@ impl Game<'_> {
-                     self.pause = self.pauses_game();
+@@ -10197,11 +10238,16 @@ impl Game<'_> {
+                     }
                      if let Some(server) = &self.integrated {
                          server.set_paused(self.pause);
 -                        server.set_distances(
@@ -8978,10 +8962,10 @@ index 2004a92..c740af2 100644
 +                            self.settings.simulation_distance
 +                        };
 +                        server.set_distances(render, simulation, self.settings.entity_distance);
-                         server.set_legacy_rules(self.pvp_legacy_rules());
+                         server.set_legacy_rules(self.settings.extras.pvp.combat.rules);
                      }
                      self.clock.end_frame(self.pause);
-@@ -11228,6 +11280,8 @@ impl Game<'_> {
+@@ -10260,6 +10306,8 @@ impl Game<'_> {
                              self.record_frame_allocs();
                          }
                          self.debug_charts.frame_times.log(elapsed.as_nanos() as i64);
@@ -8990,7 +8974,7 @@ index 2004a92..c740af2 100644
                          if self.frames == 0 {
                              // The launcher times Play to this line (launcher/src/perf.rs).
                              log::info!(
-@@ -11323,6 +11377,24 @@ impl<'a> Game<'a> {
+@@ -10369,6 +10417,24 @@ impl<'a> Game<'a> {
          audio: Audio,
          prepared: Option<GameCpuResources>,
      ) -> Result<Self> {
@@ -9012,20 +8996,20 @@ index 2004a92..c740af2 100644
 +        audio: Audio,
 +        prepared: Option<GameCpuResources>,
 +    ) -> Result<Box<Self>> {
-         let root = options.resources.clone();
-         let registry = pack.assets.registry;
-         // Until a world is opened the streamer is idle.
-@@ -11358,7 +11430,7 @@ impl<'a> Game<'a> {
-             &gui.atlas.sprites,
+         let phase = match Self::mod_phase_for_construction() {
+             mod_api::__private::ModPhase::Packages if cfg!(test) => {
+                 mod_api::__private::ModPhase::World
+@@ -10425,7 +10491,7 @@ impl<'a> Game<'a> {
              &gui.atlas.translucent,
          );
+         let resource_source = pack.source.clone();
 -        let mut game = Game {
 +        let mut game = Box::new(Game {
-             world_biomes: None,
-             world_biomes_base: None,
-             res: res.clone(),
-@@ -11456,6 +11528,8 @@ impl<'a> Game<'a> {
-             unclaimed_window: false,
+             structure_spawns: horizon_client::mobs::spawn_selection::StructureSpawns::load(
+                 &options.resources,
+             ),
+@@ -10530,6 +10596,8 @@ impl<'a> Game<'a> {
+             unclaimed_modifiers: None,
              focus_after_run: None,
              ime_allowed: false,
 +            ime_hidden: false,
@@ -9033,7 +9017,7 @@ index 2004a92..c740af2 100644
              ime_area: None,
              focus_lost: None,
              modifiers: winit::keyboard::ModifiersState::empty(),
-@@ -11590,6 +11664,10 @@ impl<'a> Game<'a> {
+@@ -10683,6 +10751,10 @@ impl<'a> Game<'a> {
              autosaving: false,
              // `computeNextAutosaveInterval` at the clock's 20 ticks a second.
              ticks_until_autosave: 6000,
@@ -9044,16 +9028,16 @@ index 2004a92..c740af2 100644
              applied_modifiers: Vec::new(),
              experience: Experience::default(),
              orbs: Default::default(),
-@@ -11917,7 +11995,7 @@ impl<'a> Game<'a> {
-             camera_type: Default::default(),
+@@ -11028,7 +11100,7 @@ impl<'a> Game<'a> {
+             requested_camera_type: Default::default(),
              fangs: Default::default(),
              player_model: None,
 -        };
 +        });
-         if game.native_window() {
-             game.native_client_start();
-         }
-@@ -12272,7 +12350,12 @@ pub fn run_with() -> Result<()> {
+         game.reset_entity_residency();
+         Ok(game)
+     }
+@@ -11128,7 +11200,12 @@ pub(crate) fn run_with(
      horizon_world::datafix::set_resources(
          &std::path::absolute(&vanilla_root).unwrap_or_else(|_| vanilla_root.clone()),
      );
@@ -9067,7 +9051,7 @@ index 2004a92..c740af2 100644
          // The game build started by hand (the release's zip), not by the
          // launcher: a window says where to get it. Scripts and servers get
          // the error.
-@@ -12326,6 +12409,21 @@ pub fn run_with() -> Result<()> {
+@@ -11231,6 +11308,21 @@ pub(crate) fn run_with(
      if !synchronous_startup(&options) {
          return run_loading(options, early_settings, vanilla_root, None, started);
      }
@@ -9086,10 +9070,10 @@ index 2004a92..c740af2 100644
 +    vanilla_root: PathBuf,
 +    started: Instant,
 +) -> Result<()> {
-     let (root, pack_error) =
-         startup_menu::startup_resource_root(&vanilla_root, &early_settings, &options.dev_mods);
-     options.resources = root;
-@@ -12374,7 +12472,7 @@ pub fn run_with() -> Result<()> {
+     let mut pack_error = None;
+     let selected_root = packs::startup_root(
+         &vanilla_root,
+@@ -11287,7 +11379,7 @@ pub(crate) fn run_with(
              );
              game.settings.save(&Game::options_path());
          }
@@ -9098,23 +9082,441 @@ index 2004a92..c740af2 100644
      }
      Ok(())
  }
-diff --git a/horizon/crates/horizon-client/src/game/agent.rs b/horizon/crates/horizon-client/src/game/agent.rs
-index 37ef53f..df6bcda 100644
---- a/horizon/crates/horizon-client/src/game/agent.rs
-+++ b/horizon/crates/horizon-client/src/game/agent.rs
-@@ -490,6 +490,7 @@ impl Game<'_> {
-             Screen::DebugOptions => "debug-options",
-             Screen::Mod => "mod",
-             Screen::HudEditor => "hud-editor",
-+            Screen::TouchEditor => "touch-editor",
-             Screen::Studio => "studio",
+diff --git a/horizon/crates/horizon-client/src/game/interface/chat.rs b/horizon/crates/horizon-client/src/game/interface/chat.rs
+index d1679d45..2f748c2d 100644
+--- a/horizon/crates/horizon-client/src/game/interface/chat.rs
++++ b/horizon/crates/horizon-client/src/game/interface/chat.rs
+@@ -1235,6 +1235,26 @@ impl Game<'_> {
+         };
+         self.chat_key_code(key, event.text.as_deref());
+     }
++    /// A key with no physical code reached the chat: type its text, if it has any. The caller logs
++    /// what arrived.
++    pub(super) fn chat_unplaced_key(&mut self, text: Option<&str>) {
++        let Some(text) = text.filter(|t| !t.is_empty()) else {
++            return;
++        };
++        if !self.types_text() {
++            return;
++        }
++        let Some(mut screen) = self.ui.chat_screen.take() else {
++            return;
++        };
++        let m = Measure(&self.gui.atlas.font);
++        let c = Commands {
++            dispatcher: chat_tree(&self.remote),
++            registries: &self.ui.registries,
++        };
++        screen.type_text(&m, &c, text);
++        self.ui.chat_screen = Some(screen);
++    }
+     /// A key (and the text it typed) while the chat screen is open.
+     pub(super) fn chat_key_code(&mut self, key: KeyCode, typed_text: Option<&str>) {
+         // The live modifiers, not `self.keys`: every ModifiersChanged runs
+diff --git a/horizon/crates/horizon-client/src/game/interface/debug_options.rs b/horizon/crates/horizon-client/src/game/interface/debug_options.rs
+index 45501d08..5f739216 100644
+--- a/horizon/crates/horizon-client/src/game/interface/debug_options.rs
++++ b/horizon/crates/horizon-client/src/game/interface/debug_options.rs
+@@ -547,7 +547,8 @@ fn debug_options_interrupts(screen: Screen, playing_overlay: bool) -> bool {
+         | Screen::DebugOptions
+         | Screen::HudEditor
+         | Screen::Studio
+-        | Screen::EmoteWheel => false,
++        | Screen::EmoteWheel
++        | Screen::TouchEditor => false,
+     }
+ }
+ 
+diff --git a/horizon/crates/horizon-client/src/game/interface/dedicated/mod.rs b/horizon/crates/horizon-client/src/game/interface/dedicated/mod.rs
+index 6e0bb0d9..2a3913c1 100644
+--- a/horizon/crates/horizon-client/src/game/interface/dedicated/mod.rs
++++ b/horizon/crates/horizon-client/src/game/interface/dedicated/mod.rs
+@@ -1712,7 +1712,7 @@ impl Game<'_> {
+         });
+         if self.is_dedicated_server() {
+             self.streaming.radius = if guest.is_some() {
+-                self.settings.render_distance
++                self.capped_render_distance()
+             } else {
+                 -1
+             };
+diff --git a/horizon/crates/horizon-client/src/game/interface/ime.rs b/horizon/crates/horizon-client/src/game/interface/ime.rs
+index 22e09156..fa8efa25 100644
+--- a/horizon/crates/horizon-client/src/game/interface/ime.rs
++++ b/horizon/crates/horizon-client/src/game/interface/ime.rs
+@@ -46,7 +46,12 @@ impl Game<'_> {
+ 
+     /// Allow the input method only while a text box has focus.
+     pub(super) fn sync_ime(&mut self) {
+-        let want = self.text_field_focused();
++        // Touch's Back put the keyboard away: the field keeps its text and its focus, but the
++        // phone's keyboard stays down until the player taps a field again (`ime_hidden`).
++        let want = self.text_field_focused() && !self.ime_hidden;
++        if !self.text_field_focused() {
++            self.ime_hidden = false;
++        }
+         if want != self.ime_allowed
+             && let Some(window) = &self.window
+         {
+diff --git a/horizon/crates/horizon-client/src/game/interface/key_codes.rs b/horizon/crates/horizon-client/src/game/interface/key_codes.rs
+index 1d0ead6a..623ebf91 100644
+--- a/horizon/crates/horizon-client/src/game/interface/key_codes.rs
++++ b/horizon/crates/horizon-client/src/game/interface/key_codes.rs
+@@ -46,9 +46,103 @@ pub(super) fn follow_named_keymap(
+             NamedKey::F33 => KeyCode::F33,
+             NamedKey::F34 => KeyCode::F34,
+             NamedKey::F35 => KeyCode::F35,
++            // The editing and navigation keys. A hardware keyboard on iOS can deliver these with
++            // no identified physical key, which `chat_key` and the text fields drop, so Enter sent
++            // nothing. They are taken from the logical key only while the physical one is missing,
++            // so a keymap that remaps them on a desktop is not overridden.
++            NamedKey::Enter if unidentified(physical_key) => KeyCode::Enter,
++            NamedKey::Backspace if unidentified(physical_key) => KeyCode::Backspace,
++            NamedKey::Tab if unidentified(physical_key) => KeyCode::Tab,
++            NamedKey::Delete if unidentified(physical_key) => KeyCode::Delete,
++            NamedKey::ArrowUp if unidentified(physical_key) => KeyCode::ArrowUp,
++            NamedKey::ArrowDown if unidentified(physical_key) => KeyCode::ArrowDown,
++            NamedKey::ArrowLeft if unidentified(physical_key) => KeyCode::ArrowLeft,
++            NamedKey::ArrowRight if unidentified(physical_key) => KeyCode::ArrowRight,
++            NamedKey::Home if unidentified(physical_key) => KeyCode::Home,
++            NamedKey::End if unidentified(physical_key) => KeyCode::End,
++            NamedKey::PageUp if unidentified(physical_key) => KeyCode::PageUp,
++            NamedKey::PageDown if unidentified(physical_key) => KeyCode::PageDown,
+             _ => return,
+         };
+         *physical_key = PhysicalKey::Code(code);
++    } else if let Key::Character(text) = logical_key {
++        // The iOS keyboard (the on-screen one and a paired one) hands winit every key as text,
++        // one character at a time, with no physical key and a Character logical key: Return
++        // arrives as "\n", never as Named(Enter). Without this chat took it for text, and the
++        // text box drops a line break, so Return sent nothing.
++        if unidentified(physical_key) && matches!(text.as_str(), "\n" | "\r") {
++            *physical_key = PhysicalKey::Code(KeyCode::Enter);
++        }
++    }
++}
++
++/// The platform gave no physical key for this event.
++fn unidentified(physical_key: &PhysicalKey) -> bool {
++    matches!(physical_key, PhysicalKey::Unidentified(_))
++}
++
++#[cfg(test)]
++mod named_key_tests {
++    use super::*;
++    use winit::keyboard::{Key, NamedKey, NativeKeyCode};
++
++    fn follow(named: NamedKey, physical: PhysicalKey) -> PhysicalKey {
++        let mut physical = physical;
++        follow_named_keymap(&Key::Named(named), &mut physical);
++        physical
++    }
++
++    #[test]
++    fn an_enter_with_no_physical_key_becomes_enter() {
++        let none = PhysicalKey::Unidentified(NativeKeyCode::Unidentified);
++        assert_eq!(follow(NamedKey::Enter, none), PhysicalKey::Code(KeyCode::Enter));
++    }
++
++    // What winit's iOS backend really sends for the Return key (platform_impl/ios/view.rs,
++    // handle_insert_text): a Character logical key holding the line break, no physical key.
++    #[test]
++    fn a_return_typed_as_text_becomes_enter() {
++        let none = || PhysicalKey::Unidentified(NativeKeyCode::Unidentified);
++        for text in ["\n", "\r"] {
++            let mut physical = none();
++            follow_named_keymap(&Key::Character(text.into()), &mut physical);
++            assert_eq!(physical, PhysicalKey::Code(KeyCode::Enter), "{text:?}");
++        }
++    }
++
++    #[test]
++    fn other_text_and_known_keys_are_left_alone() {
++        let none = || PhysicalKey::Unidentified(NativeKeyCode::Unidentified);
++        let mut physical = none();
++        follow_named_keymap(&Key::Character("a".into()), &mut physical);
++        assert_eq!(physical, none());
++        // A desktop keyboard that already named the key keeps it.
++        let mut known = PhysicalKey::Code(KeyCode::KeyA);
++        follow_named_keymap(&Key::Character("\n".into()), &mut known);
++        assert_eq!(known, PhysicalKey::Code(KeyCode::KeyA));
++    }
++
++    #[test]
++    fn the_editing_keys_are_recovered_the_same_way() {
++        let none = || PhysicalKey::Unidentified(NativeKeyCode::Unidentified);
++        for (named, code) in [
++            (NamedKey::Backspace, KeyCode::Backspace),
++            (NamedKey::Tab, KeyCode::Tab),
++            (NamedKey::Delete, KeyCode::Delete),
++            (NamedKey::ArrowUp, KeyCode::ArrowUp),
++            (NamedKey::ArrowDown, KeyCode::ArrowDown),
++            (NamedKey::ArrowLeft, KeyCode::ArrowLeft),
++            (NamedKey::ArrowRight, KeyCode::ArrowRight),
++        ] {
++            assert_eq!(follow(named, none()), PhysicalKey::Code(code));
++        }
++    }
++
++    #[test]
++    fn a_known_physical_key_is_never_overridden() {
++        // The numpad Enter stays the numpad Enter.
++        let numpad = PhysicalKey::Code(KeyCode::NumpadEnter);
++        assert_eq!(follow(NamedKey::Enter, numpad), numpad);
+     }
+ }
+ 
+diff --git a/horizon/crates/horizon-client/src/game/interface/options.rs b/horizon/crates/horizon-client/src/game/interface/options.rs
+index 0f7b428c..a3abf586 100644
+--- a/horizon/crates/horizon-client/src/game/interface/options.rs
++++ b/horizon/crates/horizon-client/src/game/interface/options.rs
+@@ -382,6 +382,7 @@ impl Game<'_> {
+                     self.sync_pregen_option();
+                     self.sync_agent_control();
+                     self.ui.options.agent_status = self.agent_status_lines();
++                    self.ui.options.perf_status = self.auto_performance_status();
+                 }
+                 Event::SliderDrag => {
+                     self.apply_settings();
+@@ -525,6 +526,8 @@ impl Game<'_> {
+                 Event::NativeSetting(i, j) => self.native_setting_event(i, j),
+                 Event::Credits => self.open_win_screen(false, super::win::Finish::Options),
+                 Event::HudEditor => self.open_hud_editor(true),
++                Event::TouchEditor => self.open_touch_editor(true),
++                Event::TouchCalibrate => self.open_touch_calibration(),
+                 // AccessibilityOptionsScreen's link button: ConfirmLinkScreen
+                 // back to the options screen.
+                 Event::AccessibilityHelp => {
+@@ -595,6 +598,8 @@ impl Game<'_> {
+             self.reload_packs();
+         }
+         self.apply_fullscreen();
++        // Auto Performance's cap, worked out before `renderer` is borrowed.
++        let resolution_scale = self.capped_resolution_scale();
+         // A failed HDR start that named no driver becomes the window's driver's, and another
+         // driver's is dropped, so HDR output is tried again.
+         if let Some(driver) = self.renderer.as_ref().and_then(|r| r.hdr_driver())
+@@ -621,7 +626,8 @@ impl Game<'_> {
+             if !s.horizon.dynamic_resolution {
+                 self.dynamic_resolution.reset();
+             }
+-            let scale = super::frame_autotune::world_scale(&s.horizon, &self.dynamic_resolution);
++            let scale = super::frame_autotune::world_scale(&s.horizon, &self.dynamic_resolution)
++                .min(resolution_scale);
+             super::frame_autotune::apply_world_post(r, &s.horizon, scale);
+             r.set_frame_generation(
+                 s.horizon.frame_generation != horizon_client::graphics::FrameGeneration::Off,
+diff --git a/horizon/crates/horizon-client/src/game/interface/pad/mod.rs b/horizon/crates/horizon-client/src/game/interface/pad/mod.rs
+index 026382e9..9399166c 100644
+--- a/horizon/crates/horizon-client/src/game/interface/pad/mod.rs
++++ b/horizon/crates/horizon-client/src/game/interface/pad/mod.rs
+@@ -56,6 +56,10 @@ pub(super) struct Pads {
+     devices: hardware::Devices,
+     /// The virtual pad of `horizon-ctl pad`.
+     injected: PadState,
++    /// What the fingers on a touch screen hold (`game/touch.rs`). Kept apart from `injected` so
++    /// that touch plays the game without making the pad "in use": the controller guide, the
++    /// button glyphs and the menus' controller focus are for a controller, not for a finger.
++    touched: PadState,
+     /// The virtual pad was in use at the last poll.
+     virtual_input: bool,
+     /// Buttons a `pad ... tap` releases at the next poll.
+@@ -284,7 +288,11 @@ impl Pads {
+ 
+     /// A replay's pad button, in place of `pad`'s line.
+     pub(super) fn inject_button(&mut self, button: Button, down: bool) {
+-        self.injected.set(button, down);
++        self.touched.set_pressed(button, down);
++    }
++    /// Touch's steering stick, on the virtual controller's left stick.
++    pub(super) fn set_injected_left(&mut self, stick: [f32; 2]) {
++        self.touched.left = stick;
+     }
+     /// Splitscreen: this player's pad state, from `source`. Another pad, or
+     /// none: the old one's A going away isn't a release.
+@@ -320,6 +328,7 @@ impl Pads {
+         self.radial.cancel();
+         self.menu.stop_craft();
+         self.injected = PadState::default();
++        self.touched = PadState::default();
+     }
+ 
+     /// Whether a held button's press went to `action`, including releases delayed until the next
+@@ -376,7 +385,8 @@ impl Game<'_> {
+ 
+     /// Once per loop iteration: read the pads and act on button changes.
+     pub(super) fn poll_pads(&mut self, event_loop: &dyn EventLoopCtl) {
+-        self.pad.virtual_input = self.pad.injected != PadState::default();
++        self.pad.virtual_input = self.pad.injected != PadState::default()
++            || self.pad.touched != PadState::default();
+         let context = self.pad_context();
+         if let Some(old) = self.pad.context.filter(|old| *old != context) {
+             if old.screen != context.screen {
+@@ -431,8 +441,10 @@ impl Game<'_> {
+         }
+         self.ui.options.pad_glyphs = Glyphs::of(&self.settings.controller, self.pad.style);
+         self.ui.options.pad_driving = self.pad.in_use && self.pad_focus_mode();
+-        let mut state = hardware.merge(&self.pad.injected);
++        let state = hardware.merge(&self.pad.injected);
++        // A finger is not a controller: only a pad, or a script's, makes the pad "in use".
+         let activity = self.pad.activity.observe(&state, &self.settings.controller);
++        let mut state = state.merge(&self.pad.touched);
+         for (i, (stick, deadzone)) in [
+             (&mut state.left, self.settings.controller.move_deadzone),
+             (&mut state.right, self.settings.controller.look_deadzone),
+@@ -522,7 +534,7 @@ impl Game<'_> {
+     }
+ 
+     /// End held actions and captures before another context receives input.
+-    fn pad_cancel_inputs(&mut self, event_loop: &dyn EventLoopCtl) {
++    pub(super) fn pad_cancel_inputs(&mut self, event_loop: &dyn EventLoopCtl) {
+         // Before the releases below: a cancelled press must not click, a cancelled trigger
+         // change the recipe book's category as it comes up, nor a cancelled radial menu
+         // commit when its opener comes up.
+diff --git a/horizon/crates/horizon-client/src/game/interface/pad_menu.rs b/horizon/crates/horizon-client/src/game/interface/pad_menu.rs
+index df497fd3..0fb9896f 100644
+--- a/horizon/crates/horizon-client/src/game/interface/pad_menu.rs
++++ b/horizon/crates/horizon-client/src/game/interface/pad_menu.rs
+@@ -373,6 +373,7 @@ impl Game<'_> {
+         matches!(
+             self.screen,
+             Screen::HudEditor
++                | Screen::TouchEditor
+                 | Screen::Inventory
+                 | Screen::Creative
+                 | Screen::Stats
+diff --git a/horizon/crates/horizon-client/src/game/interface/play_keys.rs b/horizon/crates/horizon-client/src/game/interface/play_keys.rs
+index a2fc208e..b23e64c3 100644
+--- a/horizon/crates/horizon-client/src/game/interface/play_keys.rs
++++ b/horizon/crates/horizon-client/src/game/interface/play_keys.rs
+@@ -97,6 +97,7 @@ impl Game<'_> {
+                 Screen::Mod => self.close_mod_screen(),
+                 Screen::Studio => self.close_studio_screen(),
+                 Screen::HudEditor => self.close_hud_editor(),
++                Screen::TouchEditor => self.close_touch_editor(false),
+             },
+             // `checkHotbarKeyPressed`: the keys the controls bind to the off
+             // hand and the hotbar slots, so a rebound key swaps instead of
+diff --git a/horizon/crates/horizon-client/src/game/interface/render_settings.rs b/horizon/crates/horizon-client/src/game/interface/render_settings.rs
+index 61c2d4f8..16cfa3f1 100644
+--- a/horizon/crates/horizon-client/src/game/interface/render_settings.rs
++++ b/horizon/crates/horizon-client/src/game/interface/render_settings.rs
+@@ -153,8 +153,10 @@ impl Game<'_> {
+         // LocalPlayer.refreshChatAbilities: the chat shows what the Chat option allows.
+         let abilities = self.chat_abilities();
+         self.ui.chat.set_abilities(&self.gui.atlas.font, abilities);
+-        let render_distance_changed = self.streaming.radius != self.settings.render_distance;
+-        self.streaming.radius = self.settings.render_distance;
++        // Auto Performance holds the radius to its cap; the saved setting stays the player's.
++        let radius = self.capped_render_distance();
++        let render_distance_changed = self.streaming.radius != radius;
++        self.streaming.radius = radius;
+         // Options.renderDistance, biomeBlendRadius, ambientOcclusion,
+         // cutoutLeaves, Opaque Ice and the leaf-culling mode:
+         // LevelExtractor.allChanged when they change.
+@@ -203,9 +205,13 @@ impl Game<'_> {
+     pub(super) fn far_terrain_choice(&self) -> (u32, bool) {
+         let g = &self.settings.horizon;
+         let reduced = g.far_detail == horizon_client::graphics::FarDetail::Reduced;
++        let wanted = horizon_client_input::auto_performance::capped(
++            g.lod_distance,
++            self.auto_performance.caps.lod_distance,
++        );
+         let distance = match self.server_far_terrain() {
+-            Some(offer) => g.lod_distance.min(offer.distance),
+-            None => g.lod_distance,
++            Some(offer) => wanted.min(offer.distance),
++            None => wanted,
+         };
+         (distance, reduced)
+     }
+diff --git a/horizon/crates/horizon-client/src/game/interface/screens.rs b/horizon/crates/horizon-client/src/game/interface/screens.rs
+index 93c4f4cb..fdbeba51 100644
+--- a/horizon/crates/horizon-client/src/game/interface/screens.rs
++++ b/horizon/crates/horizon-client/src/game/interface/screens.rs
+@@ -85,7 +85,8 @@ impl Screen {
+             | Self::CommandBlock
+             | Self::BlockEditor
+             | Self::DebugOptions
+-            | Self::HudEditor => true,
++            | Self::HudEditor
++            | Self::TouchEditor => true,
          }
      }
-diff --git a/horizon/crates/horizon-client/src/game/auto_performance.rs b/horizon/crates/horizon-client/src/game/auto_performance.rs
+     /// `Screen.isAllowedInPortal`: `LocalPlayer.handlePortalTransitionEffect`
+@@ -121,7 +122,9 @@ impl Screen {
+             | Self::Mod
+             // The HUD editor shows the HUD it moves.
+             | Self::HudEditor
+-            | Self::Studio | Self::EmoteWheel => false,
++            | Self::Studio
++            | Self::EmoteWheel
++            | Self::TouchEditor => false,
+             // WinScreen.extractBackground: the poem fills the screen with the End portal, the
+             // credits alone blur. Game::menu_blur knows which one rolls.
+             Self::Win => false,
+diff --git a/horizon/crates/horizon-client/src/game/interface/startup_menu.rs b/horizon/crates/horizon-client/src/game/interface/startup_menu.rs
+index 8ad8b7e4..0b5a52dc 100644
+--- a/horizon/crates/horizon-client/src/game/interface/startup_menu.rs
++++ b/horizon/crates/horizon-client/src/game/interface/startup_menu.rs
+@@ -418,6 +418,14 @@ pub(super) fn spawn_loader(
+     let handle = horizon_guest_stack::builder()
+         .name("resource-loader".into())
+         .spawn(move || {
++            // iMC (iOS, Play without closing the app): when the shell armed the hold, the engine is up
++            // with its window but does not read any game file until Play (docs/IN_PROCESS_PLAY_DESIGN.md).
++            // Unarmed, which is every other build and run, this returns at once. If the app is leaving,
++            // the loader ends without loading and says so, so `Loading` reports it like any failed load.
++            if !horizon_client_input::ios_hold::wait_for_play() {
++                let _ = sender.send(LoaderMsg::Done(Err("the app closed before Play".into())));
++                return;
++            }
+             let mut pack_error = None;
+             let root =
+                 packs::startup_root(&vanilla_root, &settings.resource_packs, &[], &mod_sources)
+@@ -453,6 +461,8 @@ pub(super) fn spawn_loader(
+ }
+ 
+ impl Loading {
++    // Not inlined: it reaches `set_ui`, and the stack on iOS is 1 MB (docs/IOS_CRASH_STACK.md).
++    #[inline(never)]
+     pub(super) fn poll_menu_resources(&mut self) -> Result<()> {
+         // Once `Done` arrived the generation is over: the caller may have taken
+         // its result, and the finished loader's channel is closed.
+@@ -748,7 +758,11 @@ impl Loading {
+                 }
+                 // Mods' settings pages open only in a running game.
+                 // The HUD editor needs a world: its button is inactive here.
+-                Event::NativeSettings(_) | Event::NativeSetting(..) | Event::HudEditor => {}
++                Event::NativeSettings(_)
++                | Event::NativeSetting(..)
++                | Event::HudEditor
++                | Event::TouchEditor
++                | Event::TouchCalibrate => {}
+                 // The startup menu runs before the game opens a control socket,
+                 // and before its sound engine (no clicks, no volume previews,
+                 // and no music tracks to list or play).
+@@ -850,6 +864,8 @@ impl Loading {
+ 
+     fn menu_action(&mut self, event_loop: &dyn EventLoopCtl, action: Action) {
+         match action {
++            // iOS in-process Play (off unless the shell allows it): Quit Game is a request to go back to the launcher.
++            Action::Quit if horizon_client_input::ios_hold::request_quit() => {}
+             Action::Quit => event_loop.exit(),
+             Action::Options => self.open_menu_options(Page::Main),
+             Action::Accessibility => self.open_menu_options(Page::Accessibility),
+diff --git a/horizon/crates/horizon-client/src/game/ios/.game-area b/horizon/crates/horizon-client/src/game/ios/.game-area
 new file mode 100644
-index 0000000..2d1d8aa
+index 00000000..81709afc
 --- /dev/null
-+++ b/horizon/crates/horizon-client/src/game/auto_performance.rs
++++ b/horizon/crates/horizon-client/src/game/ios/.game-area
+@@ -0,0 +1 @@
++Area roots are discovered; child folders belong to their module.
+diff --git a/horizon/crates/horizon-client/src/game/ios/auto_performance.rs b/horizon/crates/horizon-client/src/game/ios/auto_performance.rs
+new file mode 100644
+index 00000000..2d1d8aa3
+--- /dev/null
++++ b/horizon/crates/horizon-client/src/game/ios/auto_performance.rs
 @@ -0,0 +1,106 @@
 +//! Auto Performance, the game's side (`horizon_client_input::auto_performance` holds the rules).
 +//!
@@ -9222,256 +9624,11 @@ index 0000000..2d1d8aa
 +        ))
 +    }
 +}
-diff --git a/horizon/crates/horizon-client/src/game/chat.rs b/horizon/crates/horizon-client/src/game/chat.rs
-index 016ef90..929b790 100644
---- a/horizon/crates/horizon-client/src/game/chat.rs
-+++ b/horizon/crates/horizon-client/src/game/chat.rs
-@@ -1298,6 +1298,26 @@ impl Game<'_> {
-         };
-         self.chat_key_code(key, event.text.as_deref());
-     }
-+    /// A key with no physical code reached the chat: type its text, if it has any. The caller logs
-+    /// what arrived.
-+    pub(super) fn chat_unplaced_key(&mut self, text: Option<&str>) {
-+        let Some(text) = text.filter(|t| !t.is_empty()) else {
-+            return;
-+        };
-+        if !self.types_text() {
-+            return;
-+        }
-+        let Some(mut screen) = self.ui.chat_screen.take() else {
-+            return;
-+        };
-+        let m = Measure(&self.gui.atlas.font);
-+        let c = Commands {
-+            dispatcher: chat_tree(&self.remote),
-+            registries: &self.ui.registries,
-+        };
-+        screen.type_text(&m, &c, text);
-+        self.ui.chat_screen = Some(screen);
-+    }
-     /// A key (and the text it typed) while the chat screen is open.
-     pub(super) fn chat_key_code(&mut self, key: KeyCode, typed_text: Option<&str>) {
-         // The live modifiers, not `self.keys`: every ModifiersChanged runs
-diff --git a/horizon/crates/horizon-client/src/game/control.rs b/horizon/crates/horizon-client/src/game/control.rs
-index 1e316ad..71c1ee3 100644
---- a/horizon/crates/horizon-client/src/game/control.rs
-+++ b/horizon/crates/horizon-client/src/game/control.rs
-@@ -1191,6 +1191,8 @@ impl Game<'_> {
-                     "graphics" => Page::Graphics,
-                     "graphics-advanced" => Page::GraphicsAdvanced,
-                     "graphics-hdr" => Page::GraphicsHdr,
-+                    "graphics-imc" => Page::GraphicsImc,
-+                    "controls-touch" => Page::ControlsTouch,
-                     "extras" => Page::Extras,
-                     "pvp" => Page::Pvp,
-                     "credits" => Page::Credits,
-@@ -1458,6 +1460,7 @@ impl Game<'_> {
-             Screen::DebugOptions => "debug-options",
-             Screen::Mod => "mod",
-             Screen::HudEditor => "hud-editor",
-+            Screen::TouchEditor => "touch-editor",
-             Screen::Studio => "studio",
-         }
-     }
-diff --git a/horizon/crates/horizon-client/src/game/debug_options.rs b/horizon/crates/horizon-client/src/game/debug_options.rs
-index b703950..b267194 100644
---- a/horizon/crates/horizon-client/src/game/debug_options.rs
-+++ b/horizon/crates/horizon-client/src/game/debug_options.rs
-@@ -538,6 +538,7 @@ fn debug_options_interrupts(screen: Screen, playing_overlay: bool) -> bool {
-         | Screen::Win
-         | Screen::DebugOptions
-         | Screen::HudEditor
-+        | Screen::TouchEditor => false,
-         | Screen::Studio => false,
-     }
- }
-diff --git a/horizon/crates/horizon-client/src/game/dedicated.rs b/horizon/crates/horizon-client/src/game/dedicated.rs
-index 87c5044..9b24f9e 100644
---- a/horizon/crates/horizon-client/src/game/dedicated.rs
-+++ b/horizon/crates/horizon-client/src/game/dedicated.rs
-@@ -1676,7 +1676,7 @@ impl Game<'_> {
-         });
-         if self.standalone_server() {
-             self.streaming.radius = if guest.is_some() {
--                self.settings.render_distance
-+                self.capped_render_distance()
-             } else {
-                 -1
-             };
-diff --git a/horizon/crates/horizon-client/src/game/ime.rs b/horizon/crates/horizon-client/src/game/ime.rs
-index 02acdc1..33e8ec5 100644
---- a/horizon/crates/horizon-client/src/game/ime.rs
-+++ b/horizon/crates/horizon-client/src/game/ime.rs
-@@ -46,7 +46,12 @@ impl Game<'_> {
- 
-     /// Allow the input method only while a text box has focus.
-     pub(super) fn sync_ime(&mut self) {
--        let want = self.text_field_focused();
-+        // Touch's Back put the keyboard away: the field keeps its text and its focus, but the
-+        // phone's keyboard stays down until the player taps a field again (`ime_hidden`).
-+        let want = self.text_field_focused() && !self.ime_hidden;
-+        if !self.text_field_focused() {
-+            self.ime_hidden = false;
-+        }
-         if want != self.ime_allowed
-             && let Some(window) = &self.window
-         {
-diff --git a/horizon/crates/horizon-client/src/game/key_codes.rs b/horizon/crates/horizon-client/src/game/key_codes.rs
-index 1d0ead6..623ebf9 100644
---- a/horizon/crates/horizon-client/src/game/key_codes.rs
-+++ b/horizon/crates/horizon-client/src/game/key_codes.rs
-@@ -46,9 +46,103 @@ pub(super) fn follow_named_keymap(
-             NamedKey::F33 => KeyCode::F33,
-             NamedKey::F34 => KeyCode::F34,
-             NamedKey::F35 => KeyCode::F35,
-+            // The editing and navigation keys. A hardware keyboard on iOS can deliver these with
-+            // no identified physical key, which `chat_key` and the text fields drop, so Enter sent
-+            // nothing. They are taken from the logical key only while the physical one is missing,
-+            // so a keymap that remaps them on a desktop is not overridden.
-+            NamedKey::Enter if unidentified(physical_key) => KeyCode::Enter,
-+            NamedKey::Backspace if unidentified(physical_key) => KeyCode::Backspace,
-+            NamedKey::Tab if unidentified(physical_key) => KeyCode::Tab,
-+            NamedKey::Delete if unidentified(physical_key) => KeyCode::Delete,
-+            NamedKey::ArrowUp if unidentified(physical_key) => KeyCode::ArrowUp,
-+            NamedKey::ArrowDown if unidentified(physical_key) => KeyCode::ArrowDown,
-+            NamedKey::ArrowLeft if unidentified(physical_key) => KeyCode::ArrowLeft,
-+            NamedKey::ArrowRight if unidentified(physical_key) => KeyCode::ArrowRight,
-+            NamedKey::Home if unidentified(physical_key) => KeyCode::Home,
-+            NamedKey::End if unidentified(physical_key) => KeyCode::End,
-+            NamedKey::PageUp if unidentified(physical_key) => KeyCode::PageUp,
-+            NamedKey::PageDown if unidentified(physical_key) => KeyCode::PageDown,
-             _ => return,
-         };
-         *physical_key = PhysicalKey::Code(code);
-+    } else if let Key::Character(text) = logical_key {
-+        // The iOS keyboard (the on-screen one and a paired one) hands winit every key as text,
-+        // one character at a time, with no physical key and a Character logical key: Return
-+        // arrives as "\n", never as Named(Enter). Without this chat took it for text, and the
-+        // text box drops a line break, so Return sent nothing.
-+        if unidentified(physical_key) && matches!(text.as_str(), "\n" | "\r") {
-+            *physical_key = PhysicalKey::Code(KeyCode::Enter);
-+        }
-+    }
-+}
-+
-+/// The platform gave no physical key for this event.
-+fn unidentified(physical_key: &PhysicalKey) -> bool {
-+    matches!(physical_key, PhysicalKey::Unidentified(_))
-+}
-+
-+#[cfg(test)]
-+mod named_key_tests {
-+    use super::*;
-+    use winit::keyboard::{Key, NamedKey, NativeKeyCode};
-+
-+    fn follow(named: NamedKey, physical: PhysicalKey) -> PhysicalKey {
-+        let mut physical = physical;
-+        follow_named_keymap(&Key::Named(named), &mut physical);
-+        physical
-+    }
-+
-+    #[test]
-+    fn an_enter_with_no_physical_key_becomes_enter() {
-+        let none = PhysicalKey::Unidentified(NativeKeyCode::Unidentified);
-+        assert_eq!(follow(NamedKey::Enter, none), PhysicalKey::Code(KeyCode::Enter));
-+    }
-+
-+    // What winit's iOS backend really sends for the Return key (platform_impl/ios/view.rs,
-+    // handle_insert_text): a Character logical key holding the line break, no physical key.
-+    #[test]
-+    fn a_return_typed_as_text_becomes_enter() {
-+        let none = || PhysicalKey::Unidentified(NativeKeyCode::Unidentified);
-+        for text in ["\n", "\r"] {
-+            let mut physical = none();
-+            follow_named_keymap(&Key::Character(text.into()), &mut physical);
-+            assert_eq!(physical, PhysicalKey::Code(KeyCode::Enter), "{text:?}");
-+        }
-+    }
-+
-+    #[test]
-+    fn other_text_and_known_keys_are_left_alone() {
-+        let none = || PhysicalKey::Unidentified(NativeKeyCode::Unidentified);
-+        let mut physical = none();
-+        follow_named_keymap(&Key::Character("a".into()), &mut physical);
-+        assert_eq!(physical, none());
-+        // A desktop keyboard that already named the key keeps it.
-+        let mut known = PhysicalKey::Code(KeyCode::KeyA);
-+        follow_named_keymap(&Key::Character("\n".into()), &mut known);
-+        assert_eq!(known, PhysicalKey::Code(KeyCode::KeyA));
-+    }
-+
-+    #[test]
-+    fn the_editing_keys_are_recovered_the_same_way() {
-+        let none = || PhysicalKey::Unidentified(NativeKeyCode::Unidentified);
-+        for (named, code) in [
-+            (NamedKey::Backspace, KeyCode::Backspace),
-+            (NamedKey::Tab, KeyCode::Tab),
-+            (NamedKey::Delete, KeyCode::Delete),
-+            (NamedKey::ArrowUp, KeyCode::ArrowUp),
-+            (NamedKey::ArrowDown, KeyCode::ArrowDown),
-+            (NamedKey::ArrowLeft, KeyCode::ArrowLeft),
-+            (NamedKey::ArrowRight, KeyCode::ArrowRight),
-+        ] {
-+            assert_eq!(follow(named, none()), PhysicalKey::Code(code));
-+        }
-+    }
-+
-+    #[test]
-+    fn a_known_physical_key_is_never_overridden() {
-+        // The numpad Enter stays the numpad Enter.
-+        let numpad = PhysicalKey::Code(KeyCode::NumpadEnter);
-+        assert_eq!(follow(NamedKey::Enter, numpad), numpad);
-     }
- }
- 
-diff --git a/horizon/crates/horizon-client/src/game/launch_options.rs b/horizon/crates/horizon-client/src/game/launch_options.rs
-index c356903..fe06f95 100644
---- a/horizon/crates/horizon-client/src/game/launch_options.rs
-+++ b/horizon/crates/horizon-client/src/game/launch_options.rs
-@@ -84,6 +84,24 @@ pub(super) struct Options {
- }
- 
- impl Options {
-+    /// iMC (iOS, hold armed): reads the session file now, after Play. Same rules as the start's read; a
-+    /// bad or missing file leaves the game offline. Does nothing when there is no file to read.
-+    pub(super) fn apply_late_session(&mut self) {
-+        let Some(path) = self.session_file.take().filter(|p| !p.is_empty()) else {
-+            return;
-+        };
-+        if !std::path::Path::new(&path).exists() {
-+            return;
-+        }
-+        match horizon_client::auth::AuthSession::load(path.as_ref()) {
-+            Ok(session) => {
-+                self.player_name = Some(session.name.clone());
-+                horizon_client::auth::set_current(session);
-+                horizon_client::auth::prepare_chat_keys(true);
-+            }
-+            Err(e) => eprintln!("Horizon: not signed in: {e}"),
-+        }
-+    }
-     /// The name to join servers with: the one given, else the offline name kept
-     /// next to options.txt (created on first use).
-     pub(super) fn player_name(&self) -> String {
-@@ -118,7 +136,11 @@ impl Options {
-         }
-         // The launcher's account: online-mode servers need it. A bad file
-         // only leaves the game offline.
--        let session = if o.session_stdin {
-+        // iMC (iOS): with the hold armed the account is read after Play (`Options::apply_late_session`),
-+        // because the launcher writes the file at Play and the engine refuses a file older than 2 minutes.
-+        let session = if horizon_client_input::ios_hold::armed() && o.session_file.is_some() {
-+            Ok(None)
-+        } else if o.session_stdin {
-             let mut text = String::new();
-             std::io::Read::read_to_string(&mut std::io::stdin(), &mut text)
-                 .map_err(|e| e.to_string())
-diff --git a/horizon/crates/horizon-client/src/game/lifecycle.rs b/horizon/crates/horizon-client/src/game/lifecycle.rs
+diff --git a/horizon/crates/horizon-client/src/game/ios/lifecycle.rs b/horizon/crates/horizon-client/src/game/ios/lifecycle.rs
 new file mode 100644
-index 0000000..1b72e1c
+index 00000000..1b72e1c3
 --- /dev/null
-+++ b/horizon/crates/horizon-client/src/game/lifecycle.rs
++++ b/horizon/crates/horizon-client/src/game/ios/lifecycle.rs
 @@ -0,0 +1,47 @@
 +//! The phone's app lifecycle: the app goes inactive (Control Center, a call, the home
 +//! gesture) and the system may then end it without warning, or it warns that memory is short.
@@ -9520,911 +9677,11 @@ index 0000000..1b72e1c
 +        horizon_threads::release_free_memory();
 +    }
 +}
-diff --git a/horizon/crates/horizon-client/src/game/loading_screen.rs b/horizon/crates/horizon-client/src/game/loading_screen.rs
-index 9bea8ea..f4689fc 100644
---- a/horizon/crates/horizon-client/src/game/loading_screen.rs
-+++ b/horizon/crates/horizon-client/src/game/loading_screen.rs
-@@ -105,9 +105,14 @@ impl Loading {
-         );
-         // `--offscreen` renders into a texture: its window would only show white.
-         let window_step = startup::step("window.create");
-+        let attributes = match horizon_client::window::creation_size(
-+            winit::dpi::LogicalSize::new(size[0], size[1]),
-+        ) {
-+            Some(size) => attributes.with_inner_size(size),
-+            None => attributes,
-+        };
-         let window = match event_loop.create_window(
-             attributes
--                .with_inner_size(winit::dpi::LogicalSize::new(size[0], size[1]))
-                 .with_fullscreen(fullscreen.then_some(winit::window::Fullscreen::Borderless(None)))
-                 .with_visible(!self.options.as_ref().is_some_and(|o| o.offscreen)),
-         ) {
-@@ -198,11 +203,15 @@ impl Loading {
-     }
-     /// The menu bundle arrived: rebuild the loading screen with the real atlas
-     /// and title panorama.
-+    // Not inlined: on iOS the main thread has 1 MB of stack, and this builds the second renderer.
-+    // Its callers' frames must not grow by what it holds (see docs/IOS_CRASH_STACK.md).
-+    #[inline(never)]
-     pub(super) fn set_ui(&mut self, gui: UiResources, root: PathBuf) {
-         log::info!(
-             "Horizon: loading the title artwork after {} ms",
-             self.started.elapsed().as_millis()
-         );
-+        horizon_client::gfx::breadcrumb("set_ui: title artwork arrived");
-         self.menu.set_root(root, &self.settings);
-         self.gui = Some(gui);
-         self.title_drawn = false;
-@@ -216,6 +225,7 @@ impl Loading {
-             renderer.release_surface();
-         }
-         let bundle = self.gui.as_ref().expect("the menu bundle was just set");
-+        horizon_client::gfx::breadcrumb("set_ui: building the title renderer");
-         let _step = startup::step("renderer.title_artwork");
-         match loading_renderer(
-             window,
-@@ -226,6 +236,7 @@ impl Loading {
-             self.settings.horizon.api,
-         ) {
-             Ok(r) => {
-+                horizon_client::gfx::breadcrumb("set_ui: title renderer ready");
-                 horizon_client::hud::GUI_SCALE.store(self.settings.gui_scale, Ordering::Relaxed);
-                 self.renderer = Some(r);
-             }
-@@ -246,12 +257,32 @@ impl Loading {
-             event_loop.exit();
-             return;
-         }
-+        // iMC (iOS): the window waited for Play as a portrait window; the game is landscape (ios_hold).
-+        #[cfg(target_os = "ios")]
-+        if horizon_client_input::ios_hold::take_landscape_switch()
-+            && let Some(w) = &self.window
-+        {
-+            winit::platform::ios::WindowExtIOS::set_valid_orientations(
-+                &**w,
-+                winit::platform::ios::ValidOrientations::Landscape,
-+            );
-+        }
-         if let Err(error) = self.poll_menu_resources() {
-             self.error = Some(error);
-             event_loop.exit();
-             return;
-         }
-         self.poll_menu_realms(event_loop);
-+        // iMC (iOS, Play without closing the app): while the engine waits for Play the launcher covers this window, so
-+        // nothing is drawn and the loop wakes only a few times a second. It used to render the title panorama at full
-+        // speed behind the launcher, which heated the phone and competed with the launcher's own drawing. Never true
-+        // unless the shell armed the hold, so every other build and run behaves as before.
-+        if horizon_client_input::ios_hold::state() == horizon_client_input::ios_hold::State::Waiting {
-+            event_loop.set_control_flow(ControlFlow::WaitUntil(
-+                Instant::now() + std::time::Duration::from_millis(50),
-+            ));
-+            return;
-+        }
-         if let Some(w) = &self.window {
-             if self.options.as_ref().is_some_and(|o| o.offscreen) {
-                 self.draw();
-@@ -262,6 +293,10 @@ impl Loading {
-         event_loop.set_control_flow(ControlFlow::Poll);
-     }
-     pub(super) fn draw(&mut self) {
-+        // iMC (iOS): nothing is drawn while the hold waits for Play (see about_to_wait).
-+        if horizon_client_input::ios_hold::state() == horizon_client_input::ios_hold::State::Waiting {
-+            return;
-+        }
-         let Some(size) = self
-             .renderer
-             .as_ref()
-@@ -296,9 +331,17 @@ impl Loading {
-             );
-         }
-     }
--    pub(super) fn finish(&mut self, loaded: Loaded) -> Result<Option<split::Split<'static>>> {
-+    // Not inlined, and small: it builds the world renderer, so on iOS (1 MB of main-thread stack)
-+    // it must not hold the `Game` that `finish_game` creates afterwards. rustc reserves a
-+    // function's whole frame on entry, so the two halves are two functions
-+    // (docs/IOS_CRASH_STACK.md).
-+    #[inline(never)]
-+    pub(super) fn finish(&mut self, loaded: Loaded) -> Result<Option<Box<split::Split<'static>>>> {
-+        horizon_client::gfx::breadcrumb("finish: starting the game");
-         let handoff_at = Instant::now();
-         let mut options = self.options.take().ok_or("loading already finished")?;
-+        // iMC (iOS): the account the launcher wrote at Play (a no-op unless the hold was armed).
-+        options.apply_late_session();
-         options.resources = loaded.root.clone();
-         // StartupMenu owns world selection until it can hand it to Game.
-         options.world = None;
-@@ -310,6 +353,7 @@ impl Loading {
-             renderer.release_surface();
-         }
-         let renderer_at = Instant::now();
-+        horizon_client::gfx::breadcrumb("finish: building the world renderer");
-         let renderer = startup::time("renderer.world", || {
-             build_renderer(
-                 window.clone(),
-@@ -337,7 +381,40 @@ impl Loading {
-             "Horizon: world renderer ready after {} ms",
-             self.started.elapsed().as_millis()
-         );
-+        horizon_client::gfx::breadcrumb("finish: world renderer ready");
-         let renderer_ms = renderer_at.elapsed().as_millis();
-+        self.finish_game(
-+            Handoff {
-+                options,
-+                gui,
-+                window,
-+                renderer,
-+                handoff_at,
-+                renderer_ms,
-+            },
-+            Loaded {
-+                renderer_cpu: None,
-+                ..loaded
-+            },
-+        )
-+    }
-+    /// The second half of `finish`: the audio device and the game itself. Its frame holds the
-+    /// `Game` (hundreds of kilobytes), which is why it is not part of `finish`: the world
-+    /// renderer above is built while that frame does not exist yet.
-+    #[inline(never)]
-+    fn finish_game(
-+        &mut self,
-+        handoff: Handoff,
-+        loaded: Loaded,
-+    ) -> Result<Option<Box<split::Split<'static>>>> {
-+        let Handoff {
-+            options,
-+            gui,
-+            window,
-+            renderer,
-+            handoff_at,
-+            renderer_ms,
-+        } = handoff;
-         // Audio is created on the main thread, after the core is ready.
-         let audio = if !options.execution_role.is_client() {
-             Audio::silent(&options.resources)
-@@ -347,10 +424,20 @@ impl Loading {
-         let pack_error = loaded.pack_error.or_else(|| self.pack_error.take());
-         // The game borrows its shared resources for the process's lifetime,
-         // like the single copy an integrated server would share.
--        let res: &'static Arc<Resources> = Box::leak(Box::new(loaded.resources));
-+        // iMC (iOS, Play without closing the app): a leaked copy per Play would stay in memory through every Quit Game.
-+        // When the hold is armed the first Play's copy is kept in a static and every later Play uses it (the prepared
-+        // game files do not change inside one run of the app; the packs are loaded separately). Unarmed, as always.
-+        let res: &'static Arc<Resources> = if horizon_client_input::ios_hold::armed() {
-+            static SHARED: std::sync::OnceLock<Arc<Resources>> = std::sync::OnceLock::new();
-+            SHARED.get_or_init(|| loaded.resources)
-+        } else {
-+            Box::leak(Box::new(loaded.resources))
-+        };
-         let game_at = Instant::now();
-         let game_step = startup::step("handoff.start_game");
--        let Some(mut game) = start_game(
-+        // The `Game` is on the heap from `Game::new_boxed` on, so this frame only holds a pointer
-+        // while `start_game` runs (docs/IOS_CRASH_STACK.md).
-+        let started = start_boxed(
-             res,
-             loaded.pack,
-             gui,
-@@ -363,12 +450,34 @@ impl Loading {
-             Some(self.settings.clone()),
-             loaded.game_cpu,
-             loaded.entity_models,
--        )?
--        else {
-+        )?;
-+        let Some(game) = started else {
-             return Ok(None);
-         };
-         drop(game_step);
--        let game_ms = game_at.elapsed().as_millis();
-+        horizon_client::gfx::breadcrumb("finish: game started");
-+        self.finish_started(
-+            game,
-+            window,
-+            renderer,
-+            handoff_at,
-+            renderer_ms,
-+            game_at.elapsed().as_millis(),
-+        )
-+    }
-+    /// The last part of `finish`: the world renderer and the window go into the game, and the
-+    /// game becomes the application. Not part of `finish_game`, so that `start_game` runs without
-+    /// this frame beneath it.
-+    #[inline(never)]
-+    fn finish_started(
-+        &mut self,
-+        mut game: Box<Game<'static>>,
-+        window: Arc<Window>,
-+        renderer: Renderer,
-+        handoff_at: Instant,
-+        renderer_ms: u128,
-+        game_ms: u128,
-+    ) -> Result<Option<Box<split::Split<'static>>>> {
-         game.window = Some(window);
-         game.renderer = Some(renderer);
-         game.world_renderer_ready = true;
-@@ -389,27 +498,156 @@ impl Loading {
-             renderer_ms,
-             game_ms
-         );
--        Ok(Some(split::Split::new(game)))
-+        Ok(Some(boxed_split(game)))
-     }
- }
- 
-+/// `start_game`, in a frame of its own so `finish_game` stays small beneath it. `start_game` and
-+/// `Game::new_boxed` build the `Game` on the heap, so nothing here holds one by value.
-+#[inline(never)]
-+#[allow(clippy::too_many_arguments)]
-+fn start_boxed(
-+    res: &'static Arc<Resources>,
-+    pack: PackResources,
-+    gui: UiResources,
-+    options: Options,
-+    pack_error: Option<String>,
-+    audio: Audio,
-+    vanilla_root: PathBuf,
-+    started: Instant,
-+    rest_loader: Option<WorldRestLoader>,
-+    settings: Option<Settings>,
-+    prepared: Option<GameCpuResources>,
-+    entity_models: Option<Arc<horizon_client::mobs::EntityModelDocument>>,
-+) -> Result<Option<Box<Game<'static>>>> {
-+    start_game(
-+        res,
-+        pack,
-+        gui,
-+        options,
-+        pack_error,
-+        audio,
-+        vanilla_root,
-+        started,
-+        rest_loader,
-+        settings,
-+        prepared,
-+        entity_models,
-+    )
-+}
-+
-+/// A `Split` around a boxed `Game`, built in a frame that is gone when this returns: `Split::new`
-+/// takes the `Game` by value, and neither it nor the `Split` should sit in the caller's frame.
-+#[inline(never)]
-+fn boxed_split(game: Box<Game<'static>>) -> Box<split::Split<'static>> {
-+    Box::new(split::Split::new(*game))
-+}
-+
-+/// What `finish` hands to `finish_game`: the values it made or took before the world renderer.
-+struct Handoff {
-+    options: Options,
-+    gui: UiResources,
-+    window: Arc<Window>,
-+    renderer: Renderer,
-+    handoff_at: Instant,
-+    renderer_ms: u128,
-+}
-+
- /// The application: the loading screen until the resources are ready, then
- /// the game itself, on the same event loop and window.
- pub(super) enum App {
-     Loading(Box<Loading>),
-     Ready(Box<split::Split<'static>>),
-+    /// iMC (iOS, Play without closing the app): Quit Game took the engine back here. No game, no window, nothing
-+    /// loaded: the launcher is showing and the engine waits (waking every 50 ms) for the next Play, which builds a new
-+    /// `Loading` exactly as a first start does. Never entered unless the shell allowed it (`ios_hold`), so every
-+    /// other build and run only ever has the two states above (docs/IN_PROCESS_PLAY_DESIGN.md).
-+    Idle,
-+}
-+
-+/// What a new `Loading` needs, kept from the first start of an armed (in-process) run, so Quit Game can come back
-+/// here and the next Play can start over. The main thread owns it (winit's loop), hence a thread-local.
-+#[derive(Clone)]
-+pub(super) struct Relaunch {
-+    pub(super) options: Options,
-+    pub(super) settings: Settings,
-+    pub(super) vanilla_root: PathBuf,
-+    pub(super) started: Instant,
-+}
-+thread_local! {
-+    static RELAUNCH: RefCell<Option<Relaunch>> = const { RefCell::new(None) };
-+}
-+/// Called once by the first start when the hold is armed.
-+pub(super) fn keep_relaunch(relaunch: Relaunch) {
-+    RELAUNCH.with(|slot| *slot.borrow_mut() = Some(relaunch));
-+}
-+
-+/// Quit Game under the iOS in-process Play: end the game (or the loading screen) cleanly, drop it and its window, and
-+/// wait for the next Play. Its own frame so `about_to_wait`'s stays small (docs/IOS_CRASH_STACK.md).
-+#[inline(never)]
-+fn go_idle(app: &mut App, event_loop: &ActiveEventLoop) {
-+    if let App::Ready(game) = app {
-+        // The same clean stop the process end runs: pads closed, world saved (none is open at the title), reports.
-+        game.exiting(event_loop);
-+    }
-+    // Dropping the old value frees the game, its renderer and its window.
-+    *app = App::Idle;
-+    event_loop.set_control_flow(ControlFlow::WaitUntil(
-+        Instant::now() + std::time::Duration::from_millis(50),
-+    ));
-+    log::info!("Horizon: back to Idle (Quit Game), waiting for Play");
-+    if !horizon_client_input::ios_hold::enter_idle() {
-+        // The hold was cancelled: the app is leaving for good.
-+        event_loop.exit();
-+    }
-+}
-+
-+/// Play was pressed while Idle: a new `Loading`, its window and boot renderer made now.
-+#[inline(never)]
-+fn play_again(app: &mut App, event_loop: &ActiveEventLoop) {
-+    let Some(r) = RELAUNCH.with(|slot| slot.borrow().clone()) else {
-+        log::error!("Horizon: Play while Idle, but the first start's options were not kept");
-+        event_loop.exit();
-+        return;
-+    };
-+    log::info!("Horizon: Play after Idle, loading again");
-+    match loading_app(r.options, r.settings, r.vanilla_root, None, r.started) {
-+        Ok(mut fresh) => {
-+            if let App::Loading(loading) = &mut fresh {
-+                loading.resumed(event_loop);
-+            }
-+            *app = fresh;
-+        }
-+        Err(e) => {
-+            log::error!("Horizon: could not start loading again: {e}");
-+            event_loop.exit();
-+        }
-+    }
- }
-+
- impl ApplicationHandler for App {
-     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-         match self {
-             App::Loading(loading) => loading.resumed(event_loop),
-             App::Ready(game) => game.resumed(event_loop),
-+            App::Idle => {}
-+        }
-+    }
-+    fn suspended(&mut self, event_loop: &ActiveEventLoop) {
-+        if let App::Ready(game) = self {
-+            game.suspended(event_loop);
-+        }
-+    }
-+    fn memory_warning(&mut self, event_loop: &ActiveEventLoop) {
-+        if let App::Ready(game) = self {
-+            game.memory_warning(event_loop);
-         }
-     }
-     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
-         match self {
-             App::Loading(loading) => loading.window_event(event_loop, id, event),
-             App::Ready(game) => game.window_event(event_loop, id, event),
-+            App::Idle => {}
-         }
-     }
-     fn device_event(&mut self, event_loop: &ActiveEventLoop, id: DeviceId, event: DeviceEvent) {
-@@ -423,11 +661,31 @@ impl ApplicationHandler for App {
-             Ready(Box<split::Split<'static>>),
-             Done,
-             Failed(Box<dyn std::error::Error>),
-+            /// iMC (iOS): Quit Game under in-process Play.
-+            Idle,
-+            /// iMC (iOS): Play was pressed while Idle.
-+            Play,
-         }
-         let step = match self {
-             App::Ready(game) => {
-                 game.about_to_wait(event_loop);
--                return;
-+                if !horizon_client_input::ios_hold::take_quit_request() {
-+                    return;
-+                }
-+                Step::Idle
-+            }
-+            App::Idle => {
-+                if horizon_client_input::ios_hold::state()
-+                    == horizon_client_input::ios_hold::State::Released
-+                {
-+                    Step::Play
-+                } else {
-+                    // Nothing to draw or load: the launcher covers the screen. A few wake-ups a second.
-+                    event_loop.set_control_flow(ControlFlow::WaitUntil(
-+                        Instant::now() + std::time::Duration::from_millis(50),
-+                    ));
-+                    return;
-+                }
-             }
-             App::Loading(loading) => {
-                 loading.about_to_wait(event_loop);
-@@ -435,22 +693,28 @@ impl ApplicationHandler for App {
-                     event_loop.exit();
-                     return;
-                 }
--                match if loading.menu.reload_packs || !loading.ready_for_handoff() {
--                    None
-+                if horizon_client_input::ios_hold::take_quit_request() {
-+                    Step::Idle
-                 } else {
--                    loading.loaded.take()
--                } {
--                    None => Step::Waiting,
--                    Some(Err(e)) => Step::Failed(e.into()),
--                    Some(Ok(loaded)) => match loading.finish(loaded) {
--                        Ok(Some(game)) => Step::Ready(Box::new(game)),
--                        Ok(None) => Step::Done,
--                        Err(e) => Step::Failed(e),
--                    },
-+                    match if loading.menu.reload_packs || !loading.ready_for_handoff() {
-+                        None
-+                    } else {
-+                        loading.loaded.take()
-+                    } {
-+                        None => Step::Waiting,
-+                        Some(Err(e)) => Step::Failed(e.into()),
-+                        Some(Ok(loaded)) => match loading.finish(loaded) {
-+                            Ok(Some(game)) => Step::Ready(game),
-+                            Ok(None) => Step::Done,
-+                            Err(e) => Step::Failed(e),
-+                        },
-+                    }
-                 }
-             }
-         };
-         match step {
-+            Step::Idle => go_idle(self, event_loop),
-+            Step::Play => play_again(self, event_loop),
-             Step::Waiting => {}
-             Step::Ready(game) => *self = App::Ready(game),
-             Step::Done => event_loop.exit(),
-diff --git a/horizon/crates/horizon-client/src/game/loading_window.rs b/horizon/crates/horizon-client/src/game/loading_window.rs
-index 418dc0b..42a98e2 100644
---- a/horizon/crates/horizon-client/src/game/loading_window.rs
-+++ b/horizon/crates/horizon-client/src/game/loading_window.rs
-@@ -109,6 +109,8 @@ pub(super) fn build_renderer(
- /// The loading screen's renderer: one atlas (the boot screen's until the
- /// pack's GUI atlas is ready) over one opaque white block-sprite layer, an
- /// empty border texture and the title panorama once the menu bundle is ready.
-+// Not inlined: `Renderer::new` runs inside it, and on iOS the main thread has 1 MB of stack.
-+#[inline(never)]
- pub(super) fn loading_renderer(
-     window: Arc<Window>,
-     offscreen: bool,
-@@ -273,7 +275,7 @@ pub(super) fn start_game<'a>(
-     settings: Option<Settings>,
-     prepared: Option<GameCpuResources>,
-     entity_models: Option<Arc<horizon_client::mobs::EntityModelDocument>>,
--) -> Result<Option<Game<'a>>> {
-+) -> Result<Option<Box<Game<'a>>>> {
-     let handoff = prepared.is_some();
-     let mut settings = match settings {
-         Some(settings) => settings,
-@@ -291,7 +293,7 @@ pub(super) fn start_game<'a>(
-             entity_models.as_deref(),
-         )?),
-     };
--    let mut game = Game::new(res, pack, gui, options, settings, audio, prepared)?;
-+    let mut game = Game::new_boxed(res, pack, gui, options, settings, audio, prepared)?;
-     game.rest_loader = rest_loader;
-     game.ui.vanilla_root = vanilla_root;
-     if let Some(error) = pack_error {
-diff --git a/horizon/crates/horizon-client/src/game/no_resources.rs b/horizon/crates/horizon-client/src/game/no_resources.rs
-index 30cbd0b..00f83dc 100644
---- a/horizon/crates/horizon-client/src/game/no_resources.rs
-+++ b/horizon/crates/horizon-client/src/game/no_resources.rs
-@@ -98,9 +98,15 @@ impl ApplicationHandler for Missing {
-         if self.window.is_some() {
-             return;
-         }
--        let attributes =
--            horizon_client::window::with_icon(Window::default_attributes().with_title("Horizon"))
--                .with_inner_size(winit::dpi::LogicalSize::new(1040.0, 700.0));
-+        let attributes = horizon_client::window::with_icon(
-+            Window::default_attributes().with_title("Horizon"),
-+        );
-+        let attributes = match horizon_client::window::creation_size(
-+            winit::dpi::LogicalSize::new(1040.0, 700.0),
-+        ) {
-+            Some(size) => attributes.with_inner_size(size),
-+            None => attributes,
-+        };
-         let made = event_loop
-             .create_window(attributes)
-             .map_err(Into::into)
-diff --git a/horizon/crates/horizon-client/src/game/options.rs b/horizon/crates/horizon-client/src/game/options.rs
-index 15f791e..084f03f 100644
---- a/horizon/crates/horizon-client/src/game/options.rs
-+++ b/horizon/crates/horizon-client/src/game/options.rs
-@@ -365,6 +365,7 @@ impl Game<'_> {
-                     self.sync_pregen_option();
-                     self.sync_agent_control();
-                     self.ui.options.agent_status = self.agent_status_lines();
-+                    self.ui.options.perf_status = self.auto_performance_status();
-                 }
-                 Event::SliderDrag => {
-                     self.apply_settings();
-@@ -493,6 +494,8 @@ impl Game<'_> {
-                 Event::NativeButton(i, b) => self.native_settings_event(i, b),
-                 Event::Credits => self.open_win_screen(false, super::win::Finish::Options),
-                 Event::HudEditor => self.open_hud_editor(true),
-+                Event::TouchEditor => self.open_touch_editor(true),
-+                Event::TouchCalibrate => self.open_touch_calibration(),
-                 // AccessibilityOptionsScreen's link button: ConfirmLinkScreen
-                 // back to the options screen.
-                 Event::AccessibilityHelp => {
-@@ -564,6 +567,8 @@ impl Game<'_> {
-             self.reload_packs();
-         }
-         self.apply_fullscreen();
-+        // Auto Performance's cap, worked out before `renderer` is borrowed.
-+        let resolution_scale = self.capped_resolution_scale();
-         // A failed HDR start that named no driver becomes the window's driver's, and another
-         // driver's is dropped, so HDR output is tried again.
-         if let Some(driver) = self.renderer.as_ref().and_then(|r| r.hdr_driver())
-@@ -589,7 +594,8 @@ impl Game<'_> {
-             if !s.horizon.dynamic_resolution {
-                 self.dynamic_resolution.reset();
-             }
--            let scale = super::frame_autotune::world_scale(&s.horizon, &self.dynamic_resolution);
-+            let scale = super::frame_autotune::world_scale(&s.horizon, &self.dynamic_resolution)
-+                .min(resolution_scale);
-             super::frame_autotune::apply_world_post(r, &s.horizon, scale);
-             r.set_frame_generation(
-                 s.horizon.frame_generation != horizon_client::graphics::FrameGeneration::Off,
-diff --git a/horizon/crates/horizon-client/src/game/pad.rs b/horizon/crates/horizon-client/src/game/pad.rs
-index bbf4422..3f176dd 100644
---- a/horizon/crates/horizon-client/src/game/pad.rs
-+++ b/horizon/crates/horizon-client/src/game/pad.rs
-@@ -56,6 +56,10 @@ pub(super) struct Pads {
-     devices: hardware::Devices,
-     /// The virtual pad of `horizon-ctl pad`.
-     injected: PadState,
-+    /// What the fingers on a touch screen hold (`game/touch.rs`). Kept apart from `injected` so
-+    /// that touch plays the game without making the pad "in use": the controller guide, the
-+    /// button glyphs and the menus' controller focus are for a controller, not for a finger.
-+    touched: PadState,
-     /// The virtual pad was in use at the last poll.
-     virtual_input: bool,
-     /// Buttons a `pad ... tap` releases at the next poll.
-@@ -275,7 +279,11 @@ impl Pads {
- 
-     /// A replay's pad button, in place of `pad`'s line.
-     pub(super) fn inject_button(&mut self, button: Button, down: bool) {
--        self.injected.set(button, down);
-+        self.touched.set_pressed(button, down);
-+    }
-+    /// Touch's steering stick, on the virtual controller's left stick.
-+    pub(super) fn set_injected_left(&mut self, stick: [f32; 2]) {
-+        self.touched.left = stick;
-     }
-     /// Splitscreen: this player's pad state, from `source`. Another pad, or
-     /// none: the old one's A going away isn't a release.
-@@ -311,6 +319,7 @@ impl Pads {
-         self.radial.cancel();
-         self.menu.stop_craft();
-         self.injected = PadState::default();
-+        self.touched = PadState::default();
-     }
- 
-     /// Whether a held button's press went to `action`, including releases delayed until the next
-@@ -367,7 +376,8 @@ impl Game<'_> {
- 
-     /// Once per loop iteration: read the pads and act on button changes.
-     pub(super) fn poll_pads(&mut self, event_loop: &dyn EventLoopCtl) {
--        self.pad.virtual_input = self.pad.injected != PadState::default();
-+        self.pad.virtual_input = self.pad.injected != PadState::default()
-+            || self.pad.touched != PadState::default();
-         let context = self.pad_context();
-         if let Some(old) = self.pad.context.filter(|old| *old != context) {
-             if old.screen != context.screen {
-@@ -422,8 +432,10 @@ impl Game<'_> {
-         }
-         self.ui.options.pad_glyphs = Glyphs::of(&self.settings.controller, self.pad.style);
-         self.ui.options.pad_driving = self.pad.in_use && self.pad_focus_mode();
--        let mut state = hardware.merge(&self.pad.injected);
-+        let state = hardware.merge(&self.pad.injected);
-+        // A finger is not a controller: only a pad, or a script's, makes the pad "in use".
-         let activity = self.pad.activity.observe(&state, &self.settings.controller);
-+        let mut state = state.merge(&self.pad.touched);
-         for (i, (stick, deadzone)) in [
-             (&mut state.left, self.settings.controller.move_deadzone),
-             (&mut state.right, self.settings.controller.look_deadzone),
-@@ -513,7 +525,7 @@ impl Game<'_> {
-     }
- 
-     /// End held actions and captures before another context receives input.
--    fn pad_cancel_inputs(&mut self, event_loop: &dyn EventLoopCtl) {
-+    pub(super) fn pad_cancel_inputs(&mut self, event_loop: &dyn EventLoopCtl) {
-         // Before the releases below: a cancelled press must not click, a cancelled trigger
-         // change the recipe book's category as it comes up, nor a cancelled radial menu
-         // commit when its opener comes up.
-diff --git a/horizon/crates/horizon-client/src/game/pad_menu.rs b/horizon/crates/horizon-client/src/game/pad_menu.rs
-index f2e5cf0..5c534ca 100644
---- a/horizon/crates/horizon-client/src/game/pad_menu.rs
-+++ b/horizon/crates/horizon-client/src/game/pad_menu.rs
-@@ -370,6 +370,7 @@ impl Game<'_> {
-         matches!(
-             self.screen,
-             Screen::HudEditor
-+                | Screen::TouchEditor
-                 | Screen::Inventory
-                 | Screen::Creative
-                 | Screen::Stats
-diff --git a/horizon/crates/horizon-client/src/game/play_keys.rs b/horizon/crates/horizon-client/src/game/play_keys.rs
-index 85feced..ca908ae 100644
---- a/horizon/crates/horizon-client/src/game/play_keys.rs
-+++ b/horizon/crates/horizon-client/src/game/play_keys.rs
-@@ -97,6 +97,7 @@ impl Game<'_> {
-                 Screen::Mod => self.close_mod_screen(),
-                 Screen::Studio => self.close_studio_screen(),
-                 Screen::HudEditor => self.close_hud_editor(),
-+                Screen::TouchEditor => self.close_touch_editor(false),
-             },
-             // `checkHotbarKeyPressed`: the keys the controls bind to the off
-             // hand and the hotbar slots, so a rebound key swaps instead of
-diff --git a/horizon/crates/horizon-client/src/game/remote.rs b/horizon/crates/horizon-client/src/game/remote.rs
-index c75b809..987b8ab 100644
---- a/horizon/crates/horizon-client/src/game/remote.rs
-+++ b/horizon/crates/horizon-client/src/game/remote.rs
-@@ -1074,7 +1074,7 @@ impl Game<'_> {
-             self.res.threads(),
-         );
-         streaming.remote = true;
--        streaming.radius = self.settings.render_distance;
-+        streaming.radius = self.capped_render_distance();
-         self.streaming = streaming;
-         self.world = World::new(self.res.facts().air, 0);
-         self.save = Arc::new(SaveDir::new(
-@@ -1329,7 +1329,7 @@ impl Game<'_> {
-             self.res.threads(),
-         );
-         streaming.remote = true;
--        streaming.radius = self.settings.render_distance;
-+        streaming.radius = self.capped_render_distance();
-         self.streaming = streaming;
-         self.world = World::new(self.res.facts().air, 0);
-         self.save = Arc::new(SaveDir::new(
-@@ -3259,8 +3259,7 @@ impl Game<'_> {
-                     r.do_limited_crafting = p.limited_crafting;
-                 }
-                 self.streaming.radius = self
--                    .settings
--                    .render_distance
-+                    .capped_render_distance()
-                     .min(p.chunk_radius.saturating_add(1))
-                     .max(2);
-                 // handleLogin: startWaitingForNewLevel(.., Reason.OTHER).
-@@ -5108,9 +5107,9 @@ impl Game<'_> {
-                 }
-             }
-             C::SetChunkCacheRadius(p) => {
-+                // iMC: the render distance held to Auto Performance's cap, as at the other streaming-radius sites.
-                 self.streaming.radius = self
--                    .settings
--                    .render_distance
-+                    .capped_render_distance()
-                     .min(p.distance.saturating_add(1))
-                     .max(2);
-                 if let Some(r) = self.remote.as_mut() {
-diff --git a/horizon/crates/horizon-client/src/game/render_settings.rs b/horizon/crates/horizon-client/src/game/render_settings.rs
-index 6ef6e3d..2235e6e 100644
---- a/horizon/crates/horizon-client/src/game/render_settings.rs
-+++ b/horizon/crates/horizon-client/src/game/render_settings.rs
-@@ -138,8 +138,10 @@ impl Game<'_> {
-         // LocalPlayer.refreshChatAbilities: the chat shows what the Chat option allows.
-         let abilities = self.chat_abilities();
-         self.ui.chat.set_abilities(&self.gui.atlas.font, abilities);
--        let render_distance_changed = self.streaming.radius != self.settings.render_distance;
--        self.streaming.radius = self.settings.render_distance;
-+        // Auto Performance holds the radius to its cap; the saved setting stays the player's.
-+        let radius = self.capped_render_distance();
-+        let render_distance_changed = self.streaming.radius != radius;
-+        self.streaming.radius = radius;
-         // Options.renderDistance, biomeBlendRadius, ambientOcclusion,
-         // cutoutLeaves, Opaque Ice and the leaf-culling mode:
-         // LevelExtractor.allChanged when they change.
-@@ -191,9 +193,13 @@ impl Game<'_> {
-     pub(super) fn far_terrain_choice(&self) -> (u32, bool) {
-         let g = &self.settings.horizon;
-         let reduced = g.far_detail == horizon_client::graphics::FarDetail::Reduced;
-+        let wanted = horizon_client_input::auto_performance::capped(
-+            g.lod_distance,
-+            self.auto_performance.caps.lod_distance,
-+        );
-         let distance = match self.server_far_terrain() {
--            Some(offer) => g.lod_distance.min(offer.distance),
--            None => g.lod_distance,
-+            Some(offer) => wanted.min(offer.distance),
-+            None => wanted,
-         };
-         (distance, reduced)
-     }
-diff --git a/horizon/crates/horizon-client/src/game/resource_loader.rs b/horizon/crates/horizon-client/src/game/resource_loader.rs
-index 75e87a3..a174368 100644
---- a/horizon/crates/horizon-client/src/game/resource_loader.rs
-+++ b/horizon/crates/horizon-client/src/game/resource_loader.rs
-@@ -260,15 +260,17 @@ pub(super) fn write_report(game: &Game<'_>) -> Result<()> {
-     Ok(())
- }
- 
--/// The ordinary launch: load the resources on a worker while the window shows
--/// the loading screen, then swap in the game on the main thread.
--pub(super) fn run_loading(
-+/// Build the state before entering the long-lived event loop. Keeping this in
-+/// its own frame lets its construction temporaries leave the 1 MB iOS main
-+/// thread stack before the loading screen hands off to the game.
-+#[inline(never)]
-+pub(super) fn loading_app(
-     options: Options,
-     settings: Settings,
-     vanilla_root: PathBuf,
-     pack_error: Option<String>,
-     started: Instant,
--) -> Result<()> {
-+) -> Result<App> {
-     let progress = Progress::new();
-     let (receiver, loader) =
-         startup_menu::spawn_loader(&options, &settings, &vanilla_root, started, &progress)?;
-@@ -297,16 +299,40 @@ pub(super) fn run_loading(
-         menu,
-         error: None,
-     };
--    let mut app = App::Loading(Box::new(loading));
-+    Ok(App::Loading(Box::new(loading)))
-+}
-+
-+/// The ordinary launch: load the resources on a worker while the window shows
-+/// the loading screen, then swap in the game on the main thread.
-+pub(super) fn run_loading(
-+    options: Options,
-+    settings: Settings,
-+    vanilla_root: PathBuf,
-+    pack_error: Option<String>,
-+    started: Instant,
-+) -> Result<()> {
-+    // iMC (iOS, Play without closing the app): Quit Game can bring the engine back to `App::Idle`, and the next Play
-+    // starts a new `Loading` from these. Kept only when the shell armed the hold; every other run skips this.
-+    if horizon_client_input::ios_hold::armed() {
-+        loading_screen::keep_relaunch(loading_screen::Relaunch {
-+            options: options.clone(),
-+            settings: settings.clone(),
-+            vanilla_root: vanilla_root.clone(),
-+            started,
-+        });
-+    }
-+    let mut app = loading_app(options, settings, vanilla_root, pack_error, started)?;
-     let result = EventLoop::new()?.run_app(&mut app);
-     narrator::stop();
-     match &mut app {
-         // Ready: splitscreen around P1's game.
-         App::Ready(split) => leave_fullscreen_after(&result, &mut split.host.settings),
-         App::Loading(loading) => leave_fullscreen_after(&result, &mut loading.settings),
-+        App::Idle => {}
-     }
-     result?;
-     match app {
-+        App::Idle => {}
-         App::Ready(mut split) => {
-             write_report(&split.host)?;
-             if let Some(e) = split.host.error.take() {
-diff --git a/horizon/crates/horizon-client/src/game/screens.rs b/horizon/crates/horizon-client/src/game/screens.rs
-index d66ed34..3a75ffd 100644
---- a/horizon/crates/horizon-client/src/game/screens.rs
-+++ b/horizon/crates/horizon-client/src/game/screens.rs
-@@ -80,7 +80,8 @@ impl Screen {
-             | Self::CommandBlock
-             | Self::BlockEditor
-             | Self::DebugOptions
--            | Self::HudEditor => true,
-+            | Self::HudEditor
-+            | Self::TouchEditor => true,
-         }
-     }
-     /// `Screen.isAllowedInPortal`: `LocalPlayer.handlePortalTransitionEffect`
-@@ -117,6 +118,7 @@ impl Screen {
-             | Self::Mod
-             // The HUD editor shows the HUD it moves.
-             | Self::HudEditor
-+            | Self::TouchEditor => false,
-             | Self::Studio => false,
-             // WinScreen.extractBackground: the poem fills the screen with the End portal, the
-             // credits alone blur. Game::menu_blur knows which one rolls.
-diff --git a/horizon/crates/horizon-client/src/game/split.rs b/horizon/crates/horizon-client/src/game/split.rs
-index bd15a56..c24cf2e 100644
---- a/horizon/crates/horizon-client/src/game/split.rs
-+++ b/horizon/crates/horizon-client/src/game/split.rs
-@@ -611,6 +611,14 @@ impl ApplicationHandler for Split<'_> {
-         }
-     }
- 
-+    fn suspended(&mut self, event_loop: &ActiveEventLoop) {
-+        self.host.suspended(event_loop);
-+    }
-+
-+    fn memory_warning(&mut self, event_loop: &ActiveEventLoop) {
-+        self.host.memory_warning(event_loop);
-+    }
-+
-     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
-         if self.surfaces.is_empty() {
-             return self.host.window_event(event_loop, id, event);
-diff --git a/horizon/crates/horizon-client/src/game/split/players.rs b/horizon/crates/horizon-client/src/game/split/players.rs
-index 504d649..63ac36f 100644
---- a/horizon/crates/horizon-client/src/game/split/players.rs
-+++ b/horizon/crates/horizon-client/src/game/split/players.rs
-@@ -71,12 +71,14 @@ fn turned_away(game: &Game<'_>) -> Option<String> {
-     })
- }
- 
--/// The `Game` `start` makes (~67 KB, by value) into a box, in a frame of its own that is gone
--/// once it is: the copies stay out of the caller's frame, deep in the event loop.
-+/// The `Game` `start` makes, already on the heap (`start_game` builds it there), as a plain box;
-+/// a start that yields no game is an error for a guest.
- #[inline(never)]
--fn boxed(start: impl FnOnce() -> Result<Option<Game<'static>>>) -> Result<Box<Game<'static>>> {
-+fn boxed(
-+    start: impl FnOnce() -> Result<Option<Box<Game<'static>>>>,
-+) -> Result<Box<Game<'static>>> {
-     match start() {
--        Ok(Some(game)) => Ok(Box::new(game)),
-+        Ok(Some(game)) => Ok(game),
-         Ok(None) => Err("the player's game did not start".into()),
-         Err(e) => Err(e),
-     }
-diff --git a/horizon/crates/horizon-client/src/game/startup_menu.rs b/horizon/crates/horizon-client/src/game/startup_menu.rs
-index 2a142ec..dd70602 100644
---- a/horizon/crates/horizon-client/src/game/startup_menu.rs
-+++ b/horizon/crates/horizon-client/src/game/startup_menu.rs
-@@ -389,6 +389,14 @@ pub(super) fn spawn_loader(
-     let handle = std::thread::Builder::new()
-         .name("resource-loader".into())
-         .spawn(move || {
-+            // iMC (iOS, Play without closing the app): when the shell armed the hold, the engine is up
-+            // with its window but does not read any game file until Play (docs/IN_PROCESS_PLAY_DESIGN.md).
-+            // Unarmed, which is every other build and run, this returns at once. If the app is leaving,
-+            // the loader ends without loading and says so, so `Loading` reports it like any failed load.
-+            if !horizon_client_input::ios_hold::wait_for_play() {
-+                let _ = sender.send(LoaderMsg::Done(Err("the app closed before Play".into())));
-+                return;
-+            }
-             let (root, pack_error) = startup_resource_root(&vanilla_root, &settings, &dev_mods);
-             let result = load_resources(
-                 root,
-@@ -414,6 +422,8 @@ pub(super) fn spawn_loader(
- }
- 
- impl Loading {
-+    // Not inlined: it reaches `set_ui`, and the stack on iOS is 1 MB (docs/IOS_CRASH_STACK.md).
-+    #[inline(never)]
-     pub(super) fn poll_menu_resources(&mut self) -> Result<()> {
-         // Once `Done` arrived the generation is over: the caller may have taken
-         // its result, and the finished loader's channel is closed.
-@@ -678,7 +688,11 @@ impl Loading {
-                 }
-                 // Mods' settings pages open only in a running game.
-                 // The HUD editor needs a world: its button is inactive here.
--                Event::NativeSettings(_) | Event::NativeButton(..) | Event::HudEditor => {}
-+                Event::NativeSettings(_)
-+                | Event::NativeButton(..)
-+                | Event::HudEditor
-+                | Event::TouchEditor
-+                | Event::TouchCalibrate => {}
-                 // The startup menu runs before the game opens a control socket,
-                 // and before its sound engine (no clicks, no volume previews,
-                 // and no music tracks to list or play).
-@@ -775,6 +789,8 @@ impl Loading {
- 
-     fn menu_action(&mut self, event_loop: &dyn EventLoopCtl, action: Action) {
-         match action {
-+            // iOS in-process Play (off unless the shell allows it): Quit Game is a request to go back to the launcher.
-+            Action::Quit if horizon_client_input::ios_hold::request_quit() => {}
-             Action::Quit => event_loop.exit(),
-             Action::Options => self.open_menu_options(Page::Main),
-             Action::Accessibility => self.open_menu_options(Page::Accessibility),
-diff --git a/horizon/crates/horizon-client/src/game/touch.rs b/horizon/crates/horizon-client/src/game/touch.rs
+diff --git a/horizon/crates/horizon-client/src/game/ios/touch.rs b/horizon/crates/horizon-client/src/game/ios/touch.rs
 new file mode 100644
-index 0000000..c41b018
+index 00000000..c41b0189
 --- /dev/null
-+++ b/horizon/crates/horizon-client/src/game/touch.rs
++++ b/horizon/crates/horizon-client/src/game/ios/touch.rs
 @@ -0,0 +1,1032 @@
 +//! Touch on a phone: fingers become the inputs the game already has.
 +//!
@@ -11458,11 +10715,11 @@ index 0000000..c41b018
 +        assert_eq!(faded(0xFF00_0000, 7.0), 0xFF00_0000);
 +    }
 +}
-diff --git a/horizon/crates/horizon-client/src/game/touch_calibration.rs b/horizon/crates/horizon-client/src/game/touch_calibration.rs
+diff --git a/horizon/crates/horizon-client/src/game/ios/touch_calibration.rs b/horizon/crates/horizon-client/src/game/ios/touch_calibration.rs
 new file mode 100644
-index 0000000..14482c5
+index 00000000..14482c51
 --- /dev/null
-+++ b/horizon/crates/horizon-client/src/game/touch_calibration.rs
++++ b/horizon/crates/horizon-client/src/game/ios/touch_calibration.rs
 @@ -0,0 +1,155 @@
 +//! iMC Settings > Calibrate touch: five targets the player taps, from which a stretch and a shift
 +//! are fitted (`horizon_client_input::touch_calibration`) and applied to every touch after that.
@@ -11619,11 +10876,11 @@ index 0000000..14482c5
 +        }
 +    }
 +}
-diff --git a/horizon/crates/horizon-client/src/game/touch_cursor.rs b/horizon/crates/horizon-client/src/game/touch_cursor.rs
+diff --git a/horizon/crates/horizon-client/src/game/ios/touch_cursor.rs b/horizon/crates/horizon-client/src/game/ios/touch_cursor.rs
 new file mode 100644
-index 0000000..cc676ea
+index 00000000..cc676ea6
 --- /dev/null
-+++ b/horizon/crates/horizon-client/src/game/touch_cursor.rs
++++ b/horizon/crates/horizon-client/src/game/ios/touch_cursor.rs
 @@ -0,0 +1,328 @@
 +//! Cursor mode on the phone: the glue between `horizon_client_input::touch_cursor` (the pure
 +//! trackpad logic, unit tested) and the game.
@@ -11953,11 +11210,11 @@ index 0000000..cc676ea
 +        );
 +    }
 +}
-diff --git a/horizon/crates/horizon-client/src/game/touch_editor.rs b/horizon/crates/horizon-client/src/game/touch_editor.rs
+diff --git a/horizon/crates/horizon-client/src/game/ios/touch_editor.rs b/horizon/crates/horizon-client/src/game/ios/touch_editor.rs
 new file mode 100644
-index 0000000..ad70365
+index 00000000..ad70365a
 --- /dev/null
-+++ b/horizon/crates/horizon-client/src/game/touch_editor.rs
++++ b/horizon/crates/horizon-client/src/game/ios/touch_editor.rs
 @@ -0,0 +1,522 @@
 +//! The touch controls editor (iMC Settings > Edit touch controls): the on-screen buttons drawn
 +//! exactly as they are in play, over the world, on a wide stage the player drags them around.
@@ -12481,11 +11738,753 @@ index 0000000..ad70365
 +        }
 +    }
 +}
-diff --git a/horizon/crates/horizon-client/src/game/window_handler.rs b/horizon/crates/horizon-client/src/game/window_handler.rs
-index c12060c..cd2eb6f 100644
---- a/horizon/crates/horizon-client/src/game/window_handler.rs
-+++ b/horizon/crates/horizon-client/src/game/window_handler.rs
-@@ -232,6 +232,8 @@ impl Game<'_> {
+diff --git a/horizon/crates/horizon-client/src/game/network/remote/mod.rs b/horizon/crates/horizon-client/src/game/network/remote/mod.rs
+index 83577ebc..9eb7d824 100644
+--- a/horizon/crates/horizon-client/src/game/network/remote/mod.rs
++++ b/horizon/crates/horizon-client/src/game/network/remote/mod.rs
+@@ -1042,7 +1042,7 @@ impl Game<'_> {
+             self.res.threads(),
+         );
+         streaming.remote = true;
+-        streaming.radius = self.settings.render_distance;
++        streaming.radius = self.capped_render_distance();
+         self.streaming = streaming;
+         self.world = Game::world_for_mods(self.res.facts().air, 0);
+         self.save = Arc::new(SaveDir::new(
+@@ -1310,7 +1310,7 @@ impl Game<'_> {
+             self.res.threads(),
+         );
+         streaming.remote = true;
+-        streaming.radius = self.settings.render_distance;
++        streaming.radius = self.capped_render_distance();
+         self.streaming = streaming;
+         self.world = Game::world_for_mods(self.res.facts().air, 0);
+         self.save = Arc::new(SaveDir::new(
+@@ -3348,8 +3348,7 @@ impl Game<'_> {
+                 // LocalPlayer.setReducedDebugInfo always rebuilds, also on a second login.
+                 self.debug_entries.invalidate();
+                 self.streaming.radius = self
+-                    .settings
+-                    .render_distance
++                    .capped_render_distance()
+                     .min(p.chunk_radius.saturating_add(1))
+                     .max(2);
+ 
+@@ -5158,9 +5157,9 @@ impl Game<'_> {
+                 }
+             }
+             C::SetChunkCacheRadius(p) => {
++                // iMC: the render distance held to Auto Performance's cap, as at the other streaming-radius sites.
+                 self.streaming.radius = self
+-                    .settings
+-                    .render_distance
++                    .capped_render_distance()
+                     .min(p.distance.saturating_add(1))
+                     .max(2);
+                 if let Some(r) = self.remote.as_mut() {
+diff --git a/horizon/crates/horizon-client/src/game/runtime/agent/mod.rs b/horizon/crates/horizon-client/src/game/runtime/agent/mod.rs
+index 6c06d905..b3187ef6 100644
+--- a/horizon/crates/horizon-client/src/game/runtime/agent/mod.rs
++++ b/horizon/crates/horizon-client/src/game/runtime/agent/mod.rs
+@@ -475,6 +475,7 @@ impl Game<'_> {
+             Screen::DebugOptions => "debug-options",
+             Screen::Mod => "mod",
+             Screen::HudEditor => "hud-editor",
++            Screen::TouchEditor => "touch-editor",
+             Screen::Studio => "studio",
+             Screen::EmoteWheel => "emote-wheel",
+         }
+diff --git a/horizon/crates/horizon-client/src/game/runtime/control.rs b/horizon/crates/horizon-client/src/game/runtime/control.rs
+index 9ba70023..1452e3d7 100644
+--- a/horizon/crates/horizon-client/src/game/runtime/control.rs
++++ b/horizon/crates/horizon-client/src/game/runtime/control.rs
+@@ -1194,6 +1194,8 @@ impl Game<'_> {
+                     "graphics" => Page::Graphics,
+                     "graphics-advanced" => Page::GraphicsAdvanced,
+                     "graphics-hdr" => Page::GraphicsHdr,
++                    "graphics-imc" => Page::GraphicsImc,
++                    "controls-touch" => Page::ControlsTouch,
+                     "extras" => Page::Extras,
+                     "pvp" => Page::Pvp,
+                     "credits" => Page::Credits,
+@@ -1460,6 +1462,7 @@ impl Game<'_> {
+             Screen::DebugOptions => "debug-options",
+             Screen::Mod => "mod",
+             Screen::HudEditor => "hud-editor",
++            Screen::TouchEditor => "touch-editor",
+             Screen::Studio => "studio",
+             Screen::EmoteWheel => "emote-wheel",
+         }
+diff --git a/horizon/crates/horizon-client/src/game/runtime/launch_options.rs b/horizon/crates/horizon-client/src/game/runtime/launch_options.rs
+index 1bf6a360..981443b5 100644
+--- a/horizon/crates/horizon-client/src/game/runtime/launch_options.rs
++++ b/horizon/crates/horizon-client/src/game/runtime/launch_options.rs
+@@ -90,6 +90,24 @@ impl Options {
+     pub(super) fn is_client_start(&self) -> bool {
+         self.execution_role.is_client() && !self.split_guest
+     }
++    /// iMC (iOS, hold armed): reads the session file now, after Play. Same rules as the start's read; a
++    /// bad or missing file leaves the game offline. Does nothing when there is no file to read.
++    pub(super) fn apply_late_session(&mut self) {
++        let Some(path) = self.session_file.take().filter(|p| !p.is_empty()) else {
++            return;
++        };
++        if !std::path::Path::new(&path).exists() {
++            return;
++        }
++        match horizon_client::auth::AuthSession::load(path.as_ref()) {
++            Ok(session) => {
++                self.player_name = Some(session.name.clone());
++                horizon_client::auth::set_current(session);
++                horizon_client::auth::prepare_chat_keys(true);
++            }
++            Err(e) => eprintln!("Horizon: not signed in: {e}"),
++        }
++    }
+     /// The name to join servers with: the one given, else the offline name kept
+     /// next to options.txt (created on first use).
+     pub(super) fn player_name(&self) -> String {
+@@ -112,7 +130,11 @@ impl Options {
+         }
+         // The launcher's account: online-mode servers need it. A bad file
+         // only leaves the game offline.
+-        let session = if o.developer_single_player {
++        // iMC (iOS): with the hold armed the account is read after Play (`Options::apply_late_session`),
++        // because the launcher writes the file at Play and the engine refuses a file older than 2 minutes.
++        let session = if o.developer_single_player
++            || (horizon_client_input::ios_hold::armed() && o.session_file.is_some())
++        {
+             Ok(None)
+         } else if o.session_stdin {
+             let mut text = String::new();
+diff --git a/horizon/crates/horizon-client/src/game/runtime/loading_screen.rs b/horizon/crates/horizon-client/src/game/runtime/loading_screen.rs
+index 8489455d..10bf742c 100644
+--- a/horizon/crates/horizon-client/src/game/runtime/loading_screen.rs
++++ b/horizon/crates/horizon-client/src/game/runtime/loading_screen.rs
+@@ -112,9 +112,14 @@ impl Loading {
+         );
+         // `--offscreen` renders into a texture: its window would only show white.
+         let window_step = startup::step("window.create");
++        let attributes = match horizon_client::window::creation_size(
++            winit::dpi::LogicalSize::new(size[0], size[1]),
++        ) {
++            Some(size) => attributes.with_inner_size(size),
++            None => attributes,
++        };
+         let window = match event_loop.create_window(
+             attributes
+-                .with_inner_size(winit::dpi::LogicalSize::new(size[0], size[1]))
+                 .with_fullscreen(fullscreen.then_some(winit::window::Fullscreen::Borderless(None)))
+                 .with_visible(!self.options.as_ref().is_some_and(|o| o.offscreen)),
+         ) {
+@@ -205,11 +210,15 @@ impl Loading {
+     }
+     /// The menu bundle arrived: rebuild the loading screen with the real atlas
+     /// and title panorama.
++    // Not inlined: on iOS the main thread has 1 MB of stack, and this builds the second renderer.
++    // Its callers' frames must not grow by what it holds (see docs/IOS_CRASH_STACK.md).
++    #[inline(never)]
+     pub(super) fn set_ui(&mut self, gui: UiResources, root: PathBuf) {
+         log::info!(
+             "Horizon: loading the title artwork after {} ms",
+             self.started.elapsed().as_millis()
+         );
++        horizon_client::gfx::breadcrumb("set_ui: title artwork arrived");
+         let additional = self
+             .options
+             .as_ref()
+@@ -228,6 +237,7 @@ impl Loading {
+             renderer.release_surface();
+         }
+         let bundle = self.gui.as_ref().expect("the menu bundle was just set");
++        horizon_client::gfx::breadcrumb("set_ui: building the title renderer");
+         let _step = startup::step("renderer.title_artwork");
+         match loading_renderer(
+             window,
+@@ -239,6 +249,7 @@ impl Loading {
+             shader_packs::picked_pack_shape(&self.settings).ray_tracing,
+         ) {
+             Ok(r) => {
++                horizon_client::gfx::breadcrumb("set_ui: title renderer ready");
+                 self.renderer = Some(r);
+                 // The GPU holds the atlas now: keep its copy compressed until the world
+                 // renderer reads it at the handoff, as the game does after its first frame.
+@@ -263,12 +274,32 @@ impl Loading {
+             event_loop.exit();
+             return;
+         }
++        // iMC (iOS): the window waited for Play as a portrait window; the game is landscape (ios_hold).
++        #[cfg(target_os = "ios")]
++        if horizon_client_input::ios_hold::take_landscape_switch()
++            && let Some(w) = &self.window
++        {
++            winit::platform::ios::WindowExtIOS::set_valid_orientations(
++                &**w,
++                winit::platform::ios::ValidOrientations::Landscape,
++            );
++        }
+         if let Err(error) = self.poll_menu_resources() {
+             self.error = Some(error);
+             event_loop.exit();
+             return;
+         }
+         self.poll_menu_realms(event_loop);
++        // iMC (iOS, Play without closing the app): while the engine waits for Play the launcher covers this window, so
++        // nothing is drawn and the loop wakes only a few times a second. It used to render the title panorama at full
++        // speed behind the launcher, which heated the phone and competed with the launcher's own drawing. Never true
++        // unless the shell armed the hold, so every other build and run behaves as before.
++        if horizon_client_input::ios_hold::state() == horizon_client_input::ios_hold::State::Waiting {
++            event_loop.set_control_flow(ControlFlow::WaitUntil(
++                Instant::now() + std::time::Duration::from_millis(50),
++            ));
++            return;
++        }
+         if let Some(w) = &self.window {
+             if self.options.as_ref().is_some_and(|o| o.offscreen) {
+                 self.draw();
+@@ -279,6 +310,10 @@ impl Loading {
+         event_loop.set_control_flow(ControlFlow::Poll);
+     }
+     pub(super) fn draw(&mut self) {
++        // iMC (iOS): nothing is drawn while the hold waits for Play (see about_to_wait).
++        if horizon_client_input::ios_hold::state() == horizon_client_input::ios_hold::State::Waiting {
++            return;
++        }
+         let Some(size) = self
+             .renderer
+             .as_ref()
+@@ -312,9 +347,17 @@ impl Loading {
+             );
+         }
+     }
+-    pub(super) fn finish(&mut self, mut loaded: Loaded) -> Result<Option<split::Split<'static>>> {
++    // Not inlined, and small: it builds the world renderer, so on iOS (1 MB of main-thread stack)
++    // it must not hold the `Game` that `finish_game` creates afterwards. rustc reserves a
++    // function's whole frame on entry, so the two halves are two functions
++    // (docs/IOS_CRASH_STACK.md).
++    #[inline(never)]
++    pub(super) fn finish(&mut self, mut loaded: Loaded) -> Result<Option<Box<split::Split<'static>>>> {
++        horizon_client::gfx::breadcrumb("finish: starting the game");
+         let handoff_at = Instant::now();
+         let mut options = self.options.take().ok_or("loading already finished")?;
++        // iMC (iOS): the account the launcher wrote at Play (a no-op unless the hold was armed).
++        options.apply_late_session();
+         options.resources = loaded.root.clone();
+         // StartupMenu owns world selection until it can hand it to Game.
+         options.world = None;
+@@ -332,6 +375,7 @@ impl Loading {
+             }
+         }
+         let renderer_at = Instant::now();
++        horizon_client::gfx::breadcrumb("finish: building the world renderer");
+         let renderer = startup::time("renderer.world", || {
+             build_renderer(
+                 window.clone(),
+@@ -359,7 +403,40 @@ impl Loading {
+             "Horizon: world renderer ready after {} ms",
+             self.started.elapsed().as_millis()
+         );
++        horizon_client::gfx::breadcrumb("finish: world renderer ready");
+         let renderer_ms = renderer_at.elapsed().as_millis();
++        self.finish_game(
++            Handoff {
++                options,
++                gui,
++                window,
++                renderer,
++                handoff_at,
++                renderer_ms,
++            },
++            Loaded {
++                renderer_cpu: None,
++                ..loaded
++            },
++        )
++    }
++    /// The second half of `finish`: the audio device and the game itself. Its frame holds the
++    /// `Game` (hundreds of kilobytes), which is why it is not part of `finish`: the world
++    /// renderer above is built while that frame does not exist yet.
++    #[inline(never)]
++    fn finish_game(
++        &mut self,
++        handoff: Handoff,
++        mut loaded: Loaded,
++    ) -> Result<Option<Box<split::Split<'static>>>> {
++        let Handoff {
++            options,
++            gui,
++            window,
++            renderer,
++            handoff_at,
++            renderer_ms,
++        } = handoff;
+         // Audio is created on the main thread, after the core is ready.
+         let audio = if !options.execution_role.is_client() {
+             Audio::silent(&loaded.pack.source)
+@@ -376,10 +453,20 @@ impl Loading {
+         let pack_error = loaded.pack_error.or_else(|| self.pack_error.take());
+         // The game borrows its shared resources for the process's lifetime,
+         // like the single copy an integrated server would share.
+-        let res: &'static Arc<Resources> = Box::leak(Box::new(loaded.resources));
++        // iMC (iOS, Play without closing the app): a leaked copy per Play would stay in memory through every Quit Game.
++        // When the hold is armed the first Play's copy is kept in a static and every later Play uses it (the prepared
++        // game files do not change inside one run of the app; the packs are loaded separately). Unarmed, as always.
++        let res: &'static Arc<Resources> = if horizon_client_input::ios_hold::armed() {
++            static SHARED: std::sync::OnceLock<Arc<Resources>> = std::sync::OnceLock::new();
++            SHARED.get_or_init(|| loaded.resources)
++        } else {
++            Box::leak(Box::new(loaded.resources))
++        };
+         let game_at = Instant::now();
+         let game_step = startup::step("handoff.start_game");
+-        let Some(mut game) = start_game(
++        // The `Game` is on the heap from `Game::new_boxed` on, so this frame only holds a pointer
++        // while `start_game` runs (docs/IOS_CRASH_STACK.md).
++        let started = start_boxed(
+             res,
+             loaded.pack,
+             gui,
+@@ -393,12 +480,35 @@ impl Loading {
+             loaded.game_cpu,
+             std::mem::take(&mut loaded.client_applies),
+             loaded.entity_models,
+-        )?
+-        else {
++        )?;
++        let Some(game) = started else {
+             return Ok(None);
+         };
+         drop(game_step);
+-        let game_ms = game_at.elapsed().as_millis();
++        horizon_client::gfx::breadcrumb("finish: game started");
++        self.finish_started(
++            game,
++            window,
++            renderer,
++            handoff_at,
++            renderer_ms,
++            game_at.elapsed().as_millis(),
++        )
++    }
++    /// The last part of `finish`: the world renderer and the window go into the game, and the
++    /// game becomes the application. Not part of `finish_game`, so that `start_game` runs without
++    /// this frame beneath it.
++    #[inline(never)]
++    fn finish_started(
++        &mut self,
++        mut game: Box<Game<'static>>,
++        window: Arc<Window>,
++        renderer: Renderer,
++        handoff_at: Instant,
++        renderer_ms: u128,
++        game_ms: u128,
++    ) -> Result<Option<Box<split::Split<'static>>>> {
++        game.window = Some(window);
+         game.renderer = Some(renderer);
+         game.resize_state = Some(game.resize_state_of(window.inner_size()));
+         game.window = Some(window);
+@@ -420,27 +530,158 @@ impl Loading {
+             renderer_ms,
+             game_ms
+         );
+-        Ok(Some(split::Split::new(game)))
++        Ok(Some(boxed_split(game)))
+     }
+ }
+ 
++/// `start_game`, in a frame of its own so `finish_game` stays small beneath it. `start_game` and
++/// `Game::new_boxed` build the `Game` on the heap, so nothing here holds one by value.
++#[inline(never)]
++#[allow(clippy::too_many_arguments)]
++fn start_boxed(
++    res: &'static Arc<Resources>,
++    pack: PackResources,
++    gui: UiResources,
++    options: Options,
++    pack_error: Option<String>,
++    audio: Audio,
++    vanilla_root: PathBuf,
++    started: Instant,
++    rest_loader: Option<WorldRestLoader>,
++    settings: Option<Settings>,
++    prepared: Option<GameCpuResources>,
++    client_applies: Vec<client_reload::PreparedClientReload>,
++    entity_models: Option<Arc<horizon_client::mobs::EntityModelDocument>>,
++) -> Result<Option<Box<Game<'static>>>> {
++    start_game(
++        res,
++        pack,
++        gui,
++        options,
++        pack_error,
++        audio,
++        vanilla_root,
++        started,
++        rest_loader,
++        settings,
++        prepared,
++        client_applies,
++        entity_models,
++    )
++}
++
++/// A `Split` around a boxed `Game`, built in a frame that is gone when this returns: `Split::new`
++/// takes the `Game` by value, and neither it nor the `Split` should sit in the caller's frame.
++#[inline(never)]
++fn boxed_split(game: Box<Game<'static>>) -> Box<split::Split<'static>> {
++    Box::new(split::Split::new(*game))
++}
++
++/// What `finish` hands to `finish_game`: the values it made or took before the world renderer.
++struct Handoff {
++    options: Options,
++    gui: UiResources,
++    window: Arc<Window>,
++    renderer: Renderer,
++    handoff_at: Instant,
++    renderer_ms: u128,
++}
++
+ /// The application: the loading screen until the resources are ready, then
+ /// the game itself, on the same event loop and window.
+ pub(super) enum App {
+     Loading(Box<Loading>),
+     Ready(Box<split::Split<'static>>),
++    /// iMC (iOS, Play without closing the app): Quit Game took the engine back here. No game, no window, nothing
++    /// loaded: the launcher is showing and the engine waits (waking every 50 ms) for the next Play, which builds a new
++    /// `Loading` exactly as a first start does. Never entered unless the shell allowed it (`ios_hold`), so every
++    /// other build and run only ever has the two states above (docs/IN_PROCESS_PLAY_DESIGN.md).
++    Idle,
+ }
++
++/// What a new `Loading` needs, kept from the first start of an armed (in-process) run, so Quit Game can come back
++/// here and the next Play can start over. The main thread owns it (winit's loop), hence a thread-local.
++#[derive(Clone)]
++pub(super) struct Relaunch {
++    pub(super) options: Options,
++    pub(super) settings: Settings,
++    pub(super) vanilla_root: PathBuf,
++    pub(super) started: Instant,
++}
++thread_local! {
++    static RELAUNCH: RefCell<Option<Relaunch>> = const { RefCell::new(None) };
++}
++/// Called once by the first start when the hold is armed.
++pub(super) fn keep_relaunch(relaunch: Relaunch) {
++    RELAUNCH.with(|slot| *slot.borrow_mut() = Some(relaunch));
++}
++
++/// Quit Game under the iOS in-process Play: end the game (or the loading screen) cleanly, drop it and its window, and
++/// wait for the next Play. Its own frame so `about_to_wait`'s stays small (docs/IOS_CRASH_STACK.md).
++#[inline(never)]
++fn go_idle(app: &mut App, event_loop: &ActiveEventLoop) {
++    if let App::Ready(game) = app {
++        // The same clean stop the process end runs: pads closed, world saved (none is open at the title), reports.
++        game.exiting(event_loop);
++    }
++    // Dropping the old value frees the game, its renderer and its window.
++    *app = App::Idle;
++    event_loop.set_control_flow(ControlFlow::WaitUntil(
++        Instant::now() + std::time::Duration::from_millis(50),
++    ));
++    log::info!("Horizon: back to Idle (Quit Game), waiting for Play");
++    if !horizon_client_input::ios_hold::enter_idle() {
++        // The hold was cancelled: the app is leaving for good.
++        event_loop.exit();
++    }
++}
++
++/// Play was pressed while Idle: a new `Loading`, its window and boot renderer made now.
++#[inline(never)]
++fn play_again(app: &mut App, event_loop: &ActiveEventLoop) {
++    let Some(r) = RELAUNCH.with(|slot| slot.borrow().clone()) else {
++        log::error!("Horizon: Play while Idle, but the first start's options were not kept");
++        event_loop.exit();
++        return;
++    };
++    log::info!("Horizon: Play after Idle, loading again");
++    match loading_app(r.options, r.settings, r.vanilla_root, None, r.started) {
++        Ok(mut fresh) => {
++            if let App::Loading(loading) = &mut fresh {
++                loading.resumed(event_loop);
++            }
++            *app = fresh;
++        }
++        Err(e) => {
++            log::error!("Horizon: could not start loading again: {e}");
++            event_loop.exit();
++        }
++    }
++}
++
+ impl ApplicationHandler for App {
+     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+         match self {
+             App::Loading(loading) => loading.resumed(event_loop),
+             App::Ready(game) => game.resumed(event_loop),
++            App::Idle => {}
++        }
++    }
++    fn suspended(&mut self, event_loop: &ActiveEventLoop) {
++        if let App::Ready(game) = self {
++            game.suspended(event_loop);
++        }
++    }
++    fn memory_warning(&mut self, event_loop: &ActiveEventLoop) {
++        if let App::Ready(game) = self {
++            game.memory_warning(event_loop);
+         }
+     }
+     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
+         match self {
+             App::Loading(loading) => loading.window_event(event_loop, id, event),
+             App::Ready(game) => game.window_event(event_loop, id, event),
++            App::Idle => {}
+         }
+     }
+     fn device_event(&mut self, event_loop: &ActiveEventLoop, id: DeviceId, event: DeviceEvent) {
+@@ -454,11 +695,31 @@ impl ApplicationHandler for App {
+             Ready(Box<split::Split<'static>>),
+             Done,
+             Failed(Box<dyn std::error::Error>),
++            /// iMC (iOS): Quit Game under in-process Play.
++            Idle,
++            /// iMC (iOS): Play was pressed while Idle.
++            Play,
+         }
+         let step = match self {
+             App::Ready(game) => {
+                 game.about_to_wait(event_loop);
+-                return;
++                if !horizon_client_input::ios_hold::take_quit_request() {
++                    return;
++                }
++                Step::Idle
++            }
++            App::Idle => {
++                if horizon_client_input::ios_hold::state()
++                    == horizon_client_input::ios_hold::State::Released
++                {
++                    Step::Play
++                } else {
++                    // Nothing to draw or load: the launcher covers the screen. A few wake-ups a second.
++                    event_loop.set_control_flow(ControlFlow::WaitUntil(
++                        Instant::now() + std::time::Duration::from_millis(50),
++                    ));
++                    return;
++                }
+             }
+             App::Loading(loading) => {
+                 loading.about_to_wait(event_loop);
+@@ -466,22 +727,28 @@ impl ApplicationHandler for App {
+                     event_loop.exit();
+                     return;
+                 }
+-                match if loading.menu.reload_packs || !loading.ready_for_handoff() {
+-                    None
++                if horizon_client_input::ios_hold::take_quit_request() {
++                    Step::Idle
+                 } else {
+-                    loading.loaded.take()
+-                } {
+-                    None => Step::Waiting,
+-                    Some(Err(e)) => Step::Failed(e.into()),
+-                    Some(Ok(loaded)) => match loading.finish(loaded) {
+-                        Ok(Some(game)) => Step::Ready(Box::new(game)),
+-                        Ok(None) => Step::Done,
+-                        Err(e) => Step::Failed(e),
+-                    },
++                    match if loading.menu.reload_packs || !loading.ready_for_handoff() {
++                        None
++                    } else {
++                        loading.loaded.take()
++                    } {
++                        None => Step::Waiting,
++                        Some(Err(e)) => Step::Failed(e.into()),
++                        Some(Ok(loaded)) => match loading.finish(loaded) {
++                            Ok(Some(game)) => Step::Ready(game),
++                            Ok(None) => Step::Done,
++                            Err(e) => Step::Failed(e),
++                        },
++                    }
+                 }
+             }
+         };
+         match step {
++            Step::Idle => go_idle(self, event_loop),
++            Step::Play => play_again(self, event_loop),
+             Step::Waiting => {}
+             Step::Ready(game) => *self = App::Ready(game),
+             Step::Done => event_loop.exit(),
+diff --git a/horizon/crates/horizon-client/src/game/runtime/loading_window.rs b/horizon/crates/horizon-client/src/game/runtime/loading_window.rs
+index d7a126d9..34173edf 100644
+--- a/horizon/crates/horizon-client/src/game/runtime/loading_window.rs
++++ b/horizon/crates/horizon-client/src/game/runtime/loading_window.rs
+@@ -122,6 +122,8 @@ pub(super) fn build_renderer(
+ /// The loading screen's renderer: one atlas (the boot screen's until the
+ /// pack's GUI atlas is ready) over one opaque white block-sprite layer, an
+ /// empty border texture and the title panorama once the menu bundle is ready.
++// Not inlined: `Renderer::new` runs inside it, and on iOS the main thread has 1 MB of stack.
++#[inline(never)]
+ pub(super) fn loading_renderer(
+     window: Arc<Window>,
+     offscreen: bool,
+@@ -292,7 +294,7 @@ pub(super) fn start_game<'a>(
+     prepared: Option<GameCpuResources>,
+     client_applies: Vec<client_reload::PreparedClientReload>,
+     entity_models: Option<Arc<horizon_client::mobs::EntityModelDocument>>,
+-) -> Result<Option<Game<'a>>> {
++) -> Result<Option<Box<Game<'a>>>> {
+     let handoff = prepared.is_some();
+     let mut settings = match settings {
+         Some(settings) => settings,
+@@ -314,7 +316,7 @@ pub(super) fn start_game<'a>(
+             entity_models.as_deref(),
+         )?),
+     };
+-    let mut game = Game::new(res, pack, gui, options, settings, audio, prepared)?;
++    let mut game = Game::new_boxed(res, pack, gui, options, settings, audio, prepared)?;
+     // `new DebugRenderer()` refreshes its list.
+     game.refresh_debug_renderers();
+     game.rest_loader = rest_loader;
+diff --git a/horizon/crates/horizon-client/src/game/runtime/no_resources.rs b/horizon/crates/horizon-client/src/game/runtime/no_resources.rs
+index 21bf36ad..348d2ca0 100644
+--- a/horizon/crates/horizon-client/src/game/runtime/no_resources.rs
++++ b/horizon/crates/horizon-client/src/game/runtime/no_resources.rs
+@@ -103,9 +103,15 @@ impl ApplicationHandler for Missing {
+         if self.window.is_some() {
+             return;
+         }
+-        let attributes =
+-            horizon_client::window::with_icon(Window::default_attributes().with_title("Horizon"))
+-                .with_inner_size(winit::dpi::LogicalSize::new(1040.0, 700.0));
++        let attributes = horizon_client::window::with_icon(
++            Window::default_attributes().with_title("Horizon"),
++        );
++        let attributes = match horizon_client::window::creation_size(
++            winit::dpi::LogicalSize::new(1040.0, 700.0),
++        ) {
++            Some(size) => attributes.with_inner_size(size),
++            None => attributes,
++        };
+         let made = event_loop
+             .create_window(attributes)
+             .map_err(Into::into)
+diff --git a/horizon/crates/horizon-client/src/game/runtime/resource_loader.rs b/horizon/crates/horizon-client/src/game/runtime/resource_loader.rs
+index 89510ab1..ab9e406a 100644
+--- a/horizon/crates/horizon-client/src/game/runtime/resource_loader.rs
++++ b/horizon/crates/horizon-client/src/game/runtime/resource_loader.rs
+@@ -251,15 +251,17 @@ pub(super) fn write_report(game: &Game<'_>) -> Result<()> {
+     Ok(())
+ }
+ 
+-/// The ordinary launch: load the resources on a worker while the window shows
+-/// the loading screen, then swap in the game on the main thread.
+-pub(super) fn run_loading(
++/// Build the state before entering the long-lived event loop. Keeping this in
++/// its own frame lets its construction temporaries leave the 1 MB iOS main
++/// thread stack before the loading screen hands off to the game.
++#[inline(never)]
++pub(super) fn loading_app(
+     options: Options,
+     settings: Settings,
+     vanilla_root: PathBuf,
+     pack_error: Option<String>,
+     started: Instant,
+-) -> Result<()> {
++) -> Result<App> {
+     let progress = Progress::new();
+     let (receiver, loader) = startup_menu::spawn_loader(
+         &options,
+@@ -294,16 +296,40 @@ pub(super) fn run_loading(
+         menu,
+         error: None,
+     };
+-    let mut app = App::Loading(Box::new(loading));
++    Ok(App::Loading(Box::new(loading)))
++}
++
++/// The ordinary launch: load the resources on a worker while the window shows
++/// the loading screen, then swap in the game on the main thread.
++pub(super) fn run_loading(
++    options: Options,
++    settings: Settings,
++    vanilla_root: PathBuf,
++    pack_error: Option<String>,
++    started: Instant,
++) -> Result<()> {
++    // iMC (iOS, Play without closing the app): Quit Game can bring the engine back to `App::Idle`, and the next Play
++    // starts a new `Loading` from these. Kept only when the shell armed the hold; every other run skips this.
++    if horizon_client_input::ios_hold::armed() {
++        loading_screen::keep_relaunch(loading_screen::Relaunch {
++            options: options.clone(),
++            settings: settings.clone(),
++            vanilla_root: vanilla_root.clone(),
++            started,
++        });
++    }
++    let mut app = loading_app(options, settings, vanilla_root, pack_error, started)?;
+     let result = EventLoop::new()?.run_app(&mut app);
+     narrator::stop();
+     match &mut app {
+         // Ready: splitscreen around P1's game.
+         App::Ready(split) => leave_fullscreen_after(&result, &mut split.host.settings),
+         App::Loading(loading) => leave_fullscreen_after(&result, &mut loading.settings),
++        App::Idle => {}
+     }
+     result?;
+     match app {
++        App::Idle => {}
+         App::Ready(mut split) => {
+             write_report(&split.host)?;
+             if let Some(e) = split.host.error.take() {
+diff --git a/horizon/crates/horizon-client/src/game/runtime/split/mod.rs b/horizon/crates/horizon-client/src/game/runtime/split/mod.rs
+index 8f6b3aa1..48fd7483 100644
+--- a/horizon/crates/horizon-client/src/game/runtime/split/mod.rs
++++ b/horizon/crates/horizon-client/src/game/runtime/split/mod.rs
+@@ -605,6 +605,14 @@ impl ApplicationHandler for Split<'_> {
+         }
+     }
+ 
++    fn suspended(&mut self, event_loop: &ActiveEventLoop) {
++        self.host.suspended(event_loop);
++    }
++
++    fn memory_warning(&mut self, event_loop: &ActiveEventLoop) {
++        self.host.memory_warning(event_loop);
++    }
++
+     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
+         if self.surfaces.is_empty() {
+             return self.host.window_event(event_loop, id, event);
+diff --git a/horizon/crates/horizon-client/src/game/runtime/split/players.rs b/horizon/crates/horizon-client/src/game/runtime/split/players.rs
+index 5c3f39c4..35d11d83 100644
+--- a/horizon/crates/horizon-client/src/game/runtime/split/players.rs
++++ b/horizon/crates/horizon-client/src/game/runtime/split/players.rs
+@@ -73,12 +73,14 @@ fn turned_away(game: &Game<'_>) -> Option<String> {
+     })
+ }
+ 
+-/// The `Game` `start` makes (~67 KB, by value) into a box, in a frame of its own that is gone
+-/// once it is: the copies stay out of the caller's frame, deep in the event loop.
++/// The `Game` `start` makes, already on the heap (`start_game` builds it there), as a plain box;
++/// a start that yields no game is an error for a guest.
+ #[inline(never)]
+-fn boxed(start: impl FnOnce() -> Result<Option<Game<'static>>>) -> Result<Box<Game<'static>>> {
++fn boxed(
++    start: impl FnOnce() -> Result<Option<Box<Game<'static>>>>,
++) -> Result<Box<Game<'static>>> {
+     match start() {
+-        Ok(Some(game)) => Ok(Box::new(game)),
++        Ok(Some(game)) => Ok(game),
+         Ok(None) => Err("the player's game did not start".into()),
+         Err(e) => Err(e),
+     }
+diff --git a/horizon/crates/horizon-client/src/game/runtime/window_handler.rs b/horizon/crates/horizon-client/src/game/runtime/window_handler.rs
+index 3ce0640b..f7cb31c2 100644
+--- a/horizon/crates/horizon-client/src/game/runtime/window_handler.rs
++++ b/horizon/crates/horizon-client/src/game/runtime/window_handler.rs
+@@ -337,6 +337,8 @@ impl Game<'_> {
          if self.pending_save.is_some() {
              return;
          }
@@ -12494,7 +12493,7 @@ index c12060c..cd2eb6f 100644
          horizon_client::spans::time("pads", || self.poll_pads(event_loop));
          self.settle_after_run(event_loop);
          self.pause_if_inactive();
-@@ -277,6 +279,14 @@ impl Game<'_> {
+@@ -382,6 +384,14 @@ impl Game<'_> {
  }
  
  impl ApplicationHandler for Game<'_> {
@@ -12509,7 +12508,7 @@ index c12060c..cd2eb6f 100644
      fn resumed(&mut self, event_loop: &ActiveEventLoop) {
          if self.window.is_some() {
              return;
-@@ -300,9 +310,14 @@ impl ApplicationHandler for Game<'_> {
+@@ -405,9 +415,14 @@ impl ApplicationHandler for Game<'_> {
          self.unclaimed_window = agent_started && !self.options.offscreen;
          // `--offscreen` renders into a texture: its window would only show white.
          let window_step = startup::step("window.create");
@@ -12525,21 +12524,21 @@ index c12060c..cd2eb6f 100644
                  .with_fullscreen(fullscreen.then_some(winit::window::Fullscreen::Borderless(None)))
                  .with_visible(!self.options.offscreen)
                  .with_active(!agent_started),
-diff --git a/horizon/crates/horizon-client/src/game/world_session.rs b/horizon/crates/horizon-client/src/game/world_session.rs
-index e9b310f..25fcd62 100644
---- a/horizon/crates/horizon-client/src/game/world_session.rs
-+++ b/horizon/crates/horizon-client/src/game/world_session.rs
-@@ -24,6 +24,8 @@ impl Game<'_> {
+diff --git a/horizon/crates/horizon-client/src/game/world/world_session.rs b/horizon/crates/horizon-client/src/game/world/world_session.rs
+index 99c50e7e..7455a91d 100644
+--- a/horizon/crates/horizon-client/src/game/world/world_session.rs
++++ b/horizon/crates/horizon-client/src/game/world/world_session.rs
+@@ -26,6 +26,8 @@ impl Game<'_> {
          match action {
              // A splitscreen player's title never ends the process (P1's does).
              Action::Quit if self.options.split_guest => {}
 +            // iOS in-process Play (off unless the shell allows it): see startup_menu.rs.
 +            Action::Quit if horizon_client_input::ios_hold::request_quit() => {}
-             Action::Quit => event_loop.exit(),
-             Action::Options => self.open_options(true),
-             Action::Accessibility => {
+             Action::Quit => {
+                 self.begin_closing_save(true)?;
+                 event_loop.set_control_flow(ControlFlow::Poll);
 diff --git a/horizon/crates/horizon-hdr/Cargo.toml b/horizon/crates/horizon-hdr/Cargo.toml
-index bd16669..b610a8f 100644
+index bd16669b..b610a8ff 100644
 --- a/horizon/crates/horizon-hdr/Cargo.toml
 +++ b/horizon/crates/horizon-hdr/Cargo.toml
 @@ -9,7 +9,7 @@ description = "HDR metadata for the swapchain: the Vulkan calls the crates that
@@ -12552,7 +12551,7 @@ index bd16669..b610a8f 100644
  ash = { version = "0.38", default-features = false }
  
 diff --git a/horizon/crates/horizon-hdr/src/lib.rs b/horizon/crates/horizon-hdr/src/lib.rs
-index 4c35972..e8f5fea 100644
+index 0c399b88..b222b803 100644
 --- a/horizon/crates/horizon-hdr/src/lib.rs
 +++ b/horizon/crates/horizon-hdr/src/lib.rs
 @@ -9,7 +9,7 @@ pub mod wayland;
@@ -12596,21 +12595,22 @@ index 4c35972..e8f5fea 100644
  mod tests {
      #[test]
      fn the_frame_average_is_sent_as_unknown() {
-diff --git a/horizon/crates/horizon-threads/src/allocator_stats.rs b/horizon/crates/horizon-threads/src/allocator_stats.rs
-index 16a50fa..c64ba77 100644
---- a/horizon/crates/horizon-threads/src/allocator_stats.rs
-+++ b/horizon/crates/horizon-threads/src/allocator_stats.rs
-@@ -30,7 +30,7 @@ fn stats_json() -> Option<String> {
-         return None;
-     }
-     // SAFETY: mimalloc returns a NUL-terminated string.
--    let text = unsafe { std::ffi::CStr::from_ptr(raw) }
-+    let text = unsafe { std::ffi::CStr::from_ptr(raw.cast()) }
-         .to_string_lossy()
-         .into_owned();
-     // SAFETY: `raw` came from `mi_stats_get_json` with no buffer given.
+diff --git a/horizon/crates/horizon-mod-package/src/selection/context.rs b/horizon/crates/horizon-mod-package/src/selection/context.rs
+index f4e6e81b..549ee40e 100644
+--- a/horizon/crates/horizon-mod-package/src/selection/context.rs
++++ b/horizon/crates/horizon-mod-package/src/selection/context.rs
+@@ -13,7 +13,8 @@ pub fn data_dir_with(env: impl Fn(&str) -> Option<std::ffi::OsString>) -> PathBu
+         if let Some(d) = path("APPDATA") {
+             return d;
+         }
+-    } else if cfg!(target_os = "macos") {
++    } else if cfg!(target_vendor = "apple") {
++        // macOS, and an iOS app's container (where `HOME` points).
+         if let Some(h) = &home {
+             return h.join("Library/Application Support");
+         }
 diff --git a/horizon/crates/horizon-threads/src/process_memory.rs b/horizon/crates/horizon-threads/src/process_memory.rs
-index 9ee227a..2d2d2b2 100644
+index 9ee227a6..2d2d2b2d 100644
 --- a/horizon/crates/horizon-threads/src/process_memory.rs
 +++ b/horizon/crates/horizon-threads/src/process_memory.rs
 @@ -62,47 +62,115 @@ pub fn resident_bytes() -> Option<u64> {
@@ -12789,10 +12789,10 @@ index 9ee227a..2d2d2b2 100644
          const SIZE: usize = 256 << 20;
 diff --git a/horizon/platform/ios-bridge/Cargo.toml b/horizon/platform/ios-bridge/Cargo.toml
 new file mode 100644
-index 0000000..e43a317
+index 00000000..351fd27b
 --- /dev/null
 +++ b/horizon/platform/ios-bridge/Cargo.toml
-@@ -0,0 +1,19 @@
+@@ -0,0 +1,18 @@
 +[package]
 +name = "horizon-ios-bridge"
 +version = "0.1.0"
@@ -12808,16 +12808,15 @@ index 0000000..e43a317
 +[dependencies]
 +horizon-client = { path = "../../crates/horizon-client" }
 +horizon-threads = { path = "../../crates/horizon-threads" }
-+horizon-mods = { path = "../../crates/horizon-mods", default-features = false, features = ["index"] }
 +
 +[lints]
 +workspace = true
 diff --git a/horizon/platform/ios-bridge/src/lib.rs b/horizon/platform/ios-bridge/src/lib.rs
 new file mode 100644
-index 0000000..3e71f61
+index 00000000..7eb7b5d3
 --- /dev/null
 +++ b/horizon/platform/ios-bridge/src/lib.rs
-@@ -0,0 +1,116 @@
+@@ -0,0 +1,111 @@
 +//! The iOS app's way into Horizon.
 +//!
 +//! winit's `EventLoop::run_app` calls `UIApplicationMain` itself on iOS, so the Xcode project
@@ -12835,17 +12834,12 @@ index 0000000..3e71f61
 +#[global_allocator]
 +static ALLOCATOR: horizon_threads::Allocator = horizon_threads::ALLOCATOR;
 +
-+/// The mod API level this game serves, kept in the program for the launcher to read
-+/// (`horizon_mods::api_level::MARK`). `horizon_ios_main` reads it so the linker keeps it.
-+static MOD_API_LEVEL: [u8; 27] = horizon_mods::api_level::MARK;
-+
 +/// Starts the game and does not return until it ends (winit's `run_app` never returns on iOS).
 +///
 +/// `argc` and `argv` are the ones `main` received; Rust's `std::env::args()` reads the same
 +/// process arguments, so nothing needs to be passed through.
 +#[unsafe(no_mangle)]
 +pub extern "C" fn horizon_ios_main() {
-+    std::hint::black_box(&MOD_API_LEVEL);
 +    let _ = horizon_client::gfx::BREADCRUMB.set(breadcrumb);
 +    // Quit Game under in-process Play tells the shell here once the engine is Idle (a no-op until the shell allows it).
 +    horizon_client::ios_hold::set_idle_notifier(idle_notifier);

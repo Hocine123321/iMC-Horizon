@@ -191,3 +191,7 @@ preparing files on the phone, Worlds and Screenshots pages.
 - Checked the `horizon-update` branch against the old port: all 63 touched files and every line the port added were accounted for (re-ported into upstream's new structure, or no longer needed), the tests ran (`horizon-client-input` 404 passed), and one lost edit was found and restored (Auto Performance's cap on the server's chunk radius). The baseline file still named the old upstream, so the pristine upstream `2832168` was added as the baseline commit, the index (67 files), section R and the patches were rewritten, and the branch was merged into `main`.
 - Built Quit Game back to the launcher (`App::Idle`, `HORIZON_CHANGES.md` P.4). CI compiled it (and the stack-budget check passed). Not run on a phone.
 - Owner decisions: the test sign-in becomes the real sign-in; touch controls are polished; the launcher's main parts are done.
+
+## 2026-11-22
+
+- Moved `horizon/` to upstream `977a053` (2026-11-20) on the branch `horizon-update-977a053`: the pristine import (`8f57827`, `HORIZON_BASELINE`), then the iMC changes re-applied (31 files clean, 18 resolved by hand). Not compiled (no Rust toolchain in that session); CI is the first check. Section S of `HORIZON_CHANGES.md` lists what moved. Reason: upstream replaced its mod system (WASM runtime), which the iOS mod layer needs.

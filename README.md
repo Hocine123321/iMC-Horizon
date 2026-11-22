@@ -71,7 +71,7 @@ Requirements: an arm64 iPhone with Metal on iOS 16 or later. Development and tes
 | Path | What it is |
 |---|---|
 | `platform/ios/` | The iOS app: SwiftUI launcher, Objective-C launcher logic, crash reporter, diagnostics, and the XcodeGen project that builds the IPA. |
-| `horizon/` | Snapshot of upstream Horizon at `2832168` (MIT) plus this port's changes (listed in [`docs/HORIZON_CHANGES.md`](docs/HORIZON_CHANGES.md), with a patch to replay them on a newer upstream). The Rust bridge is `horizon/platform/ios-bridge/`. |
+| `horizon/` | Snapshot of upstream Horizon at `977a053` (MIT) plus this port's changes (listed in [`docs/HORIZON_CHANGES.md`](docs/HORIZON_CHANGES.md), with a patch to replay them on a newer upstream). The Rust bridge is `horizon/platform/ios-bridge/`. |
 | `docs/` | Feasibility report, roadmap, decisions, memory strategy, launcher, Marketplace, sign-in, touch and settings, and on-device evidence. |
 | `.github/workflows/` | CI for the port. Upstream's own workflows are kept inert in `horizon/.github/`. |
 

@@ -432,9 +432,9 @@ Quit Game). Written and unit tested in the input crate (4 tests); the other edit
 | `horizon/crates/horizon-client-input/src/ios_hold.rs` | **New, 252 lines with tests.** A process-wide state (`Disarmed`, `Waiting`, `Released`, `Cancelled`) behind a mutex and condvar: `arm`, `armed`, `play`, `cancel`, `state`, `wait_for_play`. No unsafe code, no dependency. |
 | `horizon/crates/horizon-client-input/src/lib.rs` | `pub mod ios_hold;` |
 | `horizon/crates/horizon-client/src/client_lib.rs` | `pub use horizon_client_input::ios_hold;` so the bridge reaches it as `horizon_client::ios_hold` and `Cargo.toml` and `Cargo.lock` do not change. |
-| `horizon/crates/horizon-client/src/game/startup_menu.rs` | `spawn_loader`: the loader thread first calls `ios_hold::wait_for_play()`. Unarmed it returns at once. If the hold is cancelled it sends `Done(Err)` and ends. |
+| `horizon/crates/horizon-client/src/game/interface/startup_menu.rs` | `spawn_loader`: the loader thread first calls `ios_hold::wait_for_play()`. Unarmed it returns at once. If the hold is cancelled it sends `Done(Err)` and ends. |
 | `horizon/crates/horizon-client/src/game.rs` | `run_with`: the "prepared files are missing" early return is skipped while the hold is armed (the window must exist first; the launcher only lets Play through with usable files, and the loader fails with its own message otherwise). `Options::read`: the `--session-file` read is skipped while armed. New `Options::apply_late_session`, the same read run after Play. |
-| `horizon/crates/horizon-client/src/game/loading_screen.rs` | `Loading::finish` calls `options.apply_late_session()` first (a no-op unless the hold was armed). Why: the engine refuses a session file older than two minutes and the launcher writes it at Play, not at app start. |
+| `horizon/crates/horizon-client/src/game/runtime/loading_screen.rs` | `Loading::finish` calls `options.apply_late_session()` first (a no-op unless the hold was armed). Why: the engine refuses a session file older than two minutes and the launcher writes it at Play, not at app start. |
 | `horizon/platform/ios-bridge/src/lib.rs` | Four exported C functions: `horizon_ios_arm_hold`, `horizon_ios_play`, `horizon_ios_cancel_hold`, `horizon_ios_hold_state`. |
 
 **Re-apply:** copy `ios_hold.rs`, add the two one-line exports, and put the three small hooks where the loader
@@ -454,8 +454,8 @@ the `App::Idle` state that drops the game and shows the launcher, and the bridge
 | File | Change |
 |---|---|
 | `horizon/crates/horizon-client-input/src/ios_hold.rs` | The four functions above and two tests. |
-| `horizon/crates/horizon-client/src/game/startup_menu.rs` | `menu_action`: `Action::Quit if ios_hold::request_quit() => {}` before the old arm. |
-| `horizon/crates/horizon-client/src/game/world_session.rs` | `title_action`: the same guard before `Action::Quit => event_loop.exit()`. |
+| `horizon/crates/horizon-client/src/game/interface/startup_menu.rs` | `menu_action`: `Action::Quit if ios_hold::request_quit() => {}` before the old arm. |
+| `horizon/crates/horizon-client/src/game/world/world_session.rs` | `title_action`: the same guard before `Action::Quit => event_loop.exit()`. |
 
 ### P.3 Orientation while the app waits for Play (2026-11-11, fix for the start-up swap)
 
@@ -469,8 +469,8 @@ Unarmed (every other build and run) both calls answer "no" and the window is lan
 |---|---|
 | `horizon/crates/horizon-client-input/src/ios_hold.rs` | `window_starts_portrait()` and `take_landscape_switch()` (one unit test, 7 in all). |
 | `horizon/crates/horizon-client-input/src/window.rs` | `with_horizon_icon`: iOS window orientation is Portrait while `window_starts_portrait()`, else Landscape as before. |
-| `horizon/crates/horizon-client/src/game/loading_screen.rs` | `Loading::about_to_wait`: iOS only, `take_landscape_switch()` then `set_valid_orientations(Landscape)`. |
-| `horizon/crates/horizon-client/src/game/loading_screen.rs` | `Loading::about_to_wait` and `Loading::draw`: while `ios_hold::state()` is `Waiting` (Play without closing the app, waiting behind the launcher), nothing is drawn and the loop sleeps in 50 ms steps (`ControlFlow::WaitUntil`) instead of rendering the title panorama every frame under `ControlFlow::Poll`. Why: the covered engine window used the GPU and the main thread at full speed and made the launcher lag. A no-op unless the hold was armed. |
+| `horizon/crates/horizon-client/src/game/runtime/loading_screen.rs` | `Loading::about_to_wait`: iOS only, `take_landscape_switch()` then `set_valid_orientations(Landscape)`. |
+| `horizon/crates/horizon-client/src/game/runtime/loading_screen.rs` | `Loading::about_to_wait` and `Loading::draw`: while `ios_hold::state()` is `Waiting` (Play without closing the app, waiting behind the launcher), nothing is drawn and the loop sleeps in 50 ms steps (`ControlFlow::WaitUntil`) instead of rendering the title panorama every frame under `ControlFlow::Poll`. Why: the covered engine window used the GPU and the main thread at full speed and made the launcher lag. A no-op unless the hold was armed. |
 
 **Risk:** low unarmed. Armed, untested on the phone: whether the system now starts in portrait, and the switch to
 landscape on Play. Only `horizon-client-input` was type-checked for aarch64-apple-ios locally; `horizon-client`
@@ -498,8 +498,8 @@ app (the packs are loaded separately); after importing or deleting game files, c
 | File | Change |
 |---|---|
 | `horizon/crates/horizon-client-input/src/ios_hold.rs` | `set_idle_notifier`, `enter_idle` (re-arms the hold and tells the shell once) and one test (8 in all). |
-| `horizon/crates/horizon-client/src/game/loading_screen.rs` | `App::Idle`, `Relaunch` (thread-local), `go_idle` and `play_again` (each in its own frame), the quit and Play steps in `App::about_to_wait`, and the shared `Resources` in `finish_game`. |
-| `horizon/crates/horizon-client/src/game/resource_loader.rs` | `loading_app` is `pub(super)`; `run_loading` keeps the `Relaunch` when armed and handles `App::Idle`. |
+| `horizon/crates/horizon-client/src/game/runtime/loading_screen.rs` | `App::Idle`, `Relaunch` (thread-local), `go_idle` and `play_again` (each in its own frame), the quit and Play steps in `App::about_to_wait`, and the shared `Resources` in `finish_game`. |
+| `horizon/crates/horizon-client/src/game/runtime/resource_loader.rs` | `loading_app` is `pub(super)`; `run_loading` keeps the `Relaunch` when armed and handles `App::Idle`. |
 | `horizon/crates/horizon-client/src/game.rs` | Imports `loading_app`. |
 | `horizon/platform/ios-bridge/src/lib.rs` | `horizon_ios_allow_quit`; registers the idle notifier that calls the shell's `horizon_ios_engine_idle`. |
 
@@ -540,8 +540,8 @@ counts: nothing in the game reads it, and nobody calls `take()` outside the iOS 
 | `horizon/crates/horizon-client-render/src/options_ui.rs` | `Page::ControlsTouch`, its `graphics_page` mapping and title, the flag set in `show`, `video_open`, and the Controls page's button. |
 | `horizon/crates/horizon-client-render/src/options_ui_pages.rs` | The page button's tooltip. |
 | `horizon/crates/horizon-client-render/src/ios_unused.rs` | `ControlsTouch` is a used page. |
-| `horizon/crates/horizon-client/src/game/control.rs` | The agent page name `controls-touch`. |
-| `horizon/crates/horizon-client/src/game/touch_editor.rs` | Done returns to `ControlsTouch`. |
+| `horizon/crates/horizon-client/src/game/runtime/control.rs` | The agent page name `controls-touch`. |
+| `horizon/crates/horizon-client/src/game/ios/touch_editor.rs` | Done returns to `ControlsTouch`. |
 | `horizon/crates/horizon-client/assets/horizon/lang/en_us.json` | `horizon.pages.open.touch`, `horizon.pages.touch.tooltip`. |
 
 ## Q. Bedrock-style touch, steadier cursor, Shift, presets (2026-11-13)
@@ -605,36 +605,36 @@ M horizon/crates/horizon-client-render/src/settings.rs                   [D2, I2
 M horizon/crates/horizon-client/assets/horizon/lang/en_us.json           [D2, I2, J2, K2, N, O]
 M horizon/crates/horizon-client/src/client_lib.rs                       [P]
 M horizon/crates/horizon-client/src/game.rs                              [B, C2, E2, I2, J2, L2, M, N, P]
-M horizon/crates/horizon-client/src/game/agent.rs                        [I2]
-A horizon/crates/horizon-client/src/game/auto_performance.rs             [E1]
-M horizon/crates/horizon-client/src/game/chat.rs                         [M2]
-M horizon/crates/horizon-client/src/game/control.rs                      [I2, O]
-M horizon/crates/horizon-client/src/game/debug_options.rs                [I2]
-M horizon/crates/horizon-client/src/game/dedicated.rs                    [E2]
-M horizon/crates/horizon-client/src/game/launch_options.rs                [P]
-M horizon/crates/horizon-client/src/game/ime.rs                          [I2]
-M horizon/crates/horizon-client/src/game/key_codes.rs                    [M2]
-A horizon/crates/horizon-client/src/game/lifecycle.rs                    [C1]
-M horizon/crates/horizon-client/src/game/loading_screen.rs               [A4, B, C2, P]
-M horizon/crates/horizon-client/src/game/loading_window.rs               [B]
-M horizon/crates/horizon-client/src/game/no_resources.rs                 [A4]
-M horizon/crates/horizon-client/src/game/options.rs                      [E2, I2, J2]
-M horizon/crates/horizon-client/src/game/pad.rs                          [C2, I2, M]
-M horizon/crates/horizon-client/src/game/pad_menu.rs                     [I2]
-M horizon/crates/horizon-client/src/game/play_keys.rs                    [I2]
-M horizon/crates/horizon-client/src/game/remote.rs                       [E2]
-M horizon/crates/horizon-client/src/game/render_settings.rs              [E2]
-M horizon/crates/horizon-client/src/game/resource_loader.rs               [P]
-M horizon/crates/horizon-client/src/game/screens.rs                      [I2]
-M horizon/crates/horizon-client/src/game/split.rs                        [C2]
-M horizon/crates/horizon-client/src/game/split/players.rs                [B]
-M horizon/crates/horizon-client/src/game/startup_menu.rs                 [B, I2, J2, P]
-A horizon/crates/horizon-client/src/game/touch.rs                        [C1, C2, I2, J2, K2, L2, N]
-A horizon/crates/horizon-client/src/game/touch_calibration.rs            [J1]
-A horizon/crates/horizon-client/src/game/touch_cursor.rs                 [N]
-A horizon/crates/horizon-client/src/game/touch_editor.rs                 [I1, K2, L2, O]
-M horizon/crates/horizon-client/src/game/window_handler.rs               [A4, C2]
-M horizon/crates/horizon-client/src/game/world_session.rs                [P]
+M horizon/crates/horizon-client/src/game/runtime/agent/mod.rs                        [I2]
+A horizon/crates/horizon-client/src/game/ios/auto_performance.rs             [E1]
+M horizon/crates/horizon-client/src/game/interface/chat.rs                         [M2]
+M horizon/crates/horizon-client/src/game/runtime/control.rs                      [I2, O]
+M horizon/crates/horizon-client/src/game/interface/debug_options.rs                [I2]
+M horizon/crates/horizon-client/src/game/interface/dedicated/mod.rs                    [E2]
+M horizon/crates/horizon-client/src/game/runtime/launch_options.rs                [P]
+M horizon/crates/horizon-client/src/game/interface/ime.rs                          [I2]
+M horizon/crates/horizon-client/src/game/interface/key_codes.rs                    [M2]
+A horizon/crates/horizon-client/src/game/ios/lifecycle.rs                    [C1]
+M horizon/crates/horizon-client/src/game/runtime/loading_screen.rs               [A4, B, C2, P]
+M horizon/crates/horizon-client/src/game/runtime/loading_window.rs               [B]
+M horizon/crates/horizon-client/src/game/runtime/no_resources.rs                 [A4]
+M horizon/crates/horizon-client/src/game/interface/options.rs                      [E2, I2, J2]
+M horizon/crates/horizon-client/src/game/interface/pad/mod.rs                          [C2, I2, M]
+M horizon/crates/horizon-client/src/game/interface/pad_menu.rs                     [I2]
+M horizon/crates/horizon-client/src/game/interface/play_keys.rs                    [I2]
+M horizon/crates/horizon-client/src/game/network/remote/mod.rs                       [E2]
+M horizon/crates/horizon-client/src/game/interface/render_settings.rs              [E2]
+M horizon/crates/horizon-client/src/game/runtime/resource_loader.rs               [P]
+M horizon/crates/horizon-client/src/game/interface/screens.rs                      [I2]
+M horizon/crates/horizon-client/src/game/runtime/split/mod.rs                        [C2]
+M horizon/crates/horizon-client/src/game/runtime/split/players.rs                [B]
+M horizon/crates/horizon-client/src/game/interface/startup_menu.rs                 [B, I2, J2, P]
+A horizon/crates/horizon-client/src/game/ios/touch.rs                        [C1, C2, I2, J2, K2, L2, N]
+A horizon/crates/horizon-client/src/game/ios/touch_calibration.rs            [J1]
+A horizon/crates/horizon-client/src/game/ios/touch_cursor.rs                 [N]
+A horizon/crates/horizon-client/src/game/ios/touch_editor.rs                 [I1, K2, L2, O]
+M horizon/crates/horizon-client/src/game/runtime/window_handler.rs               [A4, C2]
+M horizon/crates/horizon-client/src/game/world/world_session.rs                [P]
 M horizon/crates/horizon-hdr/Cargo.toml                                  [A1]
 M horizon/crates/horizon-hdr/src/lib.rs                                  [A1]
 M horizon/crates/horizon-threads/src/process_memory.rs                   [A3]
@@ -664,6 +664,34 @@ went:
 **The baseline.** The rebuild was committed as one commit on `horizon-update`, so the pristine upstream was added afterwards as its own commit (the
 `HORIZON_BASELINE` id) and joined to the branch with a no-change merge; `tools/horizon_diff.sh` diffs against it. Checked: the baseline's tree is
 upstream `2832168` byte for byte, and `git diff <baseline> HEAD -- horizon` is the 69 files listed in F.
+
+## S. Moving horizon/ to upstream `977a053` (2026-11-20)
+
+`horizon/` was rebuilt on upstream `977a053668d81400c1a36f247f14edf8dc7fadaa` (from `2832168`; about 2,960 commits, 8,970 files). The pristine
+import is `docs/HORIZON_BASELINE` (`8f57827`). The patch was replayed with `git apply --3way` after rewriting its paths to upstream's new
+layout: 31 of 49 files applied, 18 conflicted and were resolved by hand. **Nothing here was compiled** (the work was done without a Rust
+toolchain): the first CI build is the check, and the hand-edited `Cargo.lock` entry for `horizon-ios-bridge` should be regenerated and approved.
+
+What upstream changed under our edits:
+
+- **`game/*.rs` moved into area folders** (`interface/`, `runtime/`, `world/`, `network/`). The game's module list is now generated from the
+  folders (`horizon-game-discovery`), and a `.rs` file directly in `game/` fails the build. Our six files (`touch*.rs`, `lifecycle.rs`,
+  `auto_performance.rs`) therefore live in a new area folder, `game/ios/` (`.game-area` marker); no `mod` lines in `game.rs`.
+- **`OptionsUi::layout` moved to `options_ui/layout.rs`**: the greying of unused settings (`grey_unused`) is applied there.
+- **`backend_order` and `NO_GPU_DRIVER` moved to `gfx/device.rs`**: Metal for iOS and the Apple cfg edits are made there.
+- **`data_dir_with` moved to `horizon-mod-package/src/selection/context.rs`**: `target_vendor = "apple"` so an iOS app's `HOME` gives the
+  Application Support folder (`logging::data_dir` now calls it).
+- **The old mod system is gone** (`horizon-mods`, `api_level::MARK`): the iOS bridge no longer depends on `horizon-mods` and no longer keeps the
+  API level marker.
+- **`start_game` takes `client_applies`**: `start_boxed` passes it on. `finish_game` is `mut loaded`.
+- **Dropped**: the `GUI_SCALE` store in `Loading::set_ui` (the global no longer exists), `ModSettings` on the options `Act` enum (upstream removed it).
+
+Files new to the list in S: `horizon/crates/horizon-client-render/src/gfx/device.rs` (Metal for iOS in `backend_order`, Apple `NO_GPU_DRIVER`),
+`horizon/crates/horizon-client-render/src/options_ui/layout.rs` (`grey_unused`), `horizon/crates/horizon-client/src/game/ios/.game-area` (the area marker)
+and `horizon/crates/horizon-mod-package/src/selection/context.rs` (`data_dir_with`, Apple).
+
+Known gaps, not yet done: `horizon-mod-package/src/runtime_leases/filesystem.rs` answers "unsupported filesystem" on iOS (it lists Linux, macOS and
+Windows only), and `holder` / `local_control` are compiled only on those three; the new mod runtime will need both for iOS.
 
 ## G. Rebase checklist
 
