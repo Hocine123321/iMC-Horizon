@@ -52,8 +52,40 @@ Friends and Foes 5.0.5 and GlitchCore 26.3.0.0.5:
 `jar.rs` (jars and jar-in-jar), `resolve.rs` (dependencies, conflicts, load order), `report.rs` (what each mod needs) and the `fabric-inspect` command.
 It runs no mod code.
 
-## Open decisions
+## Decisions (2026-11-21, owner)
 
-- How the layer runs Java: a JDK 25 the player installs, or one Horizon downloads (upstream's docs say its Java bridge would be an optional download).
-- Where the layer lives: as a Horizon native mod (desktop only, built against a pinned Horizon commit) or as a separate process Horizon talks to.
-- Licences: several of these mods are not freely redistributable; the layer must never contain them, and it reads them from the player's own folder.
+- **Where it lives:** Horizon-native, and it must also work on iOS. If it cannot be an ordinary Horizon mod, it goes into the fork's `horizon/` source (a crate
+  plus small gated hooks, recorded in `HORIZON_CHANGES.md` like every other edit there).
+
+## What that means for the design
+
+1. **Do not rewrite Fabric's loader; give it a game.** Fabric Loader (Apache-2.0) already discovers mods, runs entrypoints and applies Mixin, and it takes the
+   game through a pluggable game provider (`net.fabricmc.loader.impl.game.GameProvider`; I have not read its current source, so check before relying on it).
+   A "Horizon game provider" plus Mixin (MIT) lets the real loader do that work against our classes, and the Rust `fabric-layer` crate stays what it is today:
+   the preflight check (does this mod set resolve on this game, and what does it need) that runs before any JVM starts.
+2. **Rust hosts and routes; Java carries the facade.** The Minecraft and Fabric API classes the mods call are Java classes (a facade jar built by CI) whose
+   engine-facing methods are `native` and implemented in Rust, so the same facade works on any JVM that supports JNI. Engine events (a tick, a block break, a
+   screen opening) are routed from Rust into the facade's methods, where Mixin injections at a method's start or end then run the mod's code.
+3. **The JVM is the gate for iOS.** On the owner's phone a normal HotSpot VM cannot run, even with `-Xint`, because its interpreter is generated into executable
+   memory (`IOS_PREPARE_WITHOUT_JIT.md` section 2). The only JIT-free JVM that is a real option is OpenJDK's **Zero** variant (a plain C++ interpreter), which
+   has to be linked into the app statically; nobody has shown it running on iOS (`IOS_PREPARE_WITHOUT_JIT.md` route D). The layer therefore talks to the JVM
+   through one small host interface (start, load a class, call a method, register natives), with HotSpot loaded from a JDK 25 on desktop and Zero linked in
+   on iOS if that experiment succeeds. If Zero cannot be built or run, iOS needs a Rust bytecode interpreter plus the JDK's classes, which is a much larger job.
+4. **The facade's shape comes from the real game's signatures.** A mod's bytecode is only valid against the right class hierarchy (a `Zombie` has to be a
+   `LivingEntity`), and the mods alone do not carry it. The practical source is the player's own 26.3 client jar, read locally to produce a signature-only
+   facade (class tree, fields, method descriptors; no code), the way a mapping step does. It is never committed or redistributed.
+
+## Next steps, in order
+
+1. **The Zero experiment (the iOS gate):** can the existing CI recipe (`java25-ios-build.yml`) build OpenJDK 25 Zero for iOS, and does it load and run a class in the
+   simulator? It is a long macOS job and is the one result that decides whether iOS is a normal part of this plan or a later research project.
+2. **A signature index of the player's 26.3 client jar** (a local tool, output not committed), then a facade generator that stubs every class and member the mods use.
+3. **A Horizon game provider and a first run on desktop:** GlitchCore's and ResourcefulLib's entrypoints on HotSpot, with the stubs that fail printing which member was
+   missing, until they initialize.
+4. Then the Fabric API modules those use, then Biomes O' Plenty and TerraBlender.
+
+## Still open
+
+- Whether the owner will provide the 26.3 client jar for step 2 (it stays on the machine it is used on).
+- Whether to start the Zero build (step 1) now: it uses a few hours of macOS CI time and changes nothing else in the repository.
+- Licences: several of these mods are not freely redistributable; the layer never contains them and reads them from the player's own folder.
