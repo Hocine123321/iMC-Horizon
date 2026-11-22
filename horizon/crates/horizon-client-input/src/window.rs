@@ -29,6 +29,24 @@ pub fn gui_scaled_size(framebuffer: [i32; 2], gui_scale: i32) -> [i32; 2] {
     [scaled(framebuffer[0]), scaled(framebuffer[1])]
 }
 
+/// The GUI dimensions shared by screen layout and resize notifications.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GuiSize {
+    pub scale: u32,
+    pub size: [u32; 2],
+}
+
+impl GuiSize {
+    pub fn new(framebuffer: [u32; 2], max_scale: u32, enforce_unicode: bool) -> Self {
+        let framebuffer = framebuffer.map(|v| v as i32);
+        let scale = calculate_scale(framebuffer, max_scale as i32, enforce_unicode);
+        Self {
+            scale: scale as u32,
+            size: gui_scaled_size(framebuffer, scale).map(|v| v as u32),
+        }
+    }
+}
+
 /// `MouseHandler.getScaledXPos`/`getScaledYPos`.
 pub fn scaled_pos(pos: f64, gui_scaled: i32, screen: i32) -> f64 {
     pos * f64::from(gui_scaled) / f64::from(screen)
@@ -601,13 +619,6 @@ pub fn borderless_fullscreen(window: &winit::window::Window) -> winit::window::F
     )
 }
 
-/// The size to ask a new window for. On iOS winit takes `inner_size` as the frame of the
-/// `UIWindow`, from the screen's corner, so a desktop-sized request (1040x700 points) makes a
-/// window larger than the phone and hangs it off the edges; with no size it fills the screen.
-pub fn creation_size(size: winit::dpi::LogicalSize<f64>) -> Option<winit::dpi::LogicalSize<f64>> {
-    (!cfg!(target_os = "ios")).then_some(size)
-}
-
 /// A window created fullscreen that the system also marked maximized enters it again
 /// unmaximized ([`enter_fullscreen`]); only Windows does that.
 pub fn settle_created_fullscreen(window: &winit::window::Window, fullscreen: bool) {
@@ -681,9 +692,9 @@ fn decode_icon(png: &[u8]) -> Option<winit::window::Icon> {
     winit::window::Icon::from_rgba(bytes, info.width, info.height).ok()
 }
 
-/// Apply the icon given to [`set_icon_png`] to a window. Windows has a separate taskbar icon slot
-/// from the small window icon; requiring a given icon to decode there prevents a generic taskbar
-/// icon from appearing.
+/// Apply the icon given to [`set_icon_png`] and the vanilla minimum inner size (320x240) to a window.
+/// Windows has a separate taskbar icon slot from the small window icon; requiring a given icon to
+/// decode there prevents a generic taskbar icon from appearing.
 pub fn with_icon(attributes: winit::window::WindowAttributes) -> winit::window::WindowAttributes {
     #[cfg(not(target_os = "windows"))]
     let icon = icon();
@@ -691,23 +702,13 @@ pub fn with_icon(attributes: winit::window::WindowAttributes) -> winit::window::
     let icon =
         icon_png().map(|png| decode_icon(png).expect("the window icon must decode on Windows"));
 
+    // Vanilla 26.3 Window.createWindow: SDL_SetWindowMinimumSize(windowHandle, 320, 240).
+    let attributes =
+        attributes.with_min_inner_size(winit::dpi::LogicalSize::new(320.0f64, 240.0f64));
     let attributes = attributes.with_window_icon(icon.clone());
     #[cfg(target_os = "windows")]
     let attributes =
         winit::platform::windows::WindowAttributesExtWindows::with_taskbar_icon(attributes, icon);
-    // iMC (iOS): the app's Info.plist allows portrait for the launcher, so the game window says it is
-    // landscape only. winit's default would let the game turn upright.
-    // While the app waits for Play (crate::ios_hold) the window is portrait, like the launcher over it, so the
-    // app does not start in landscape and turn; Play switches it to landscape (`Loading::about_to_wait`).
-    #[cfg(target_os = "ios")]
-    let attributes = winit::platform::ios::WindowAttributesExtIOS::with_valid_orientations(
-        attributes,
-        if crate::ios_hold::window_starts_portrait() {
-            winit::platform::ios::ValidOrientations::Portrait
-        } else {
-            winit::platform::ios::ValidOrientations::Landscape
-        },
-    );
     attributes
 }
 
@@ -749,11 +750,41 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_new_window_asks_for_its_size_except_on_ios() {
-        let size = winit::dpi::LogicalSize::new(1040.0, 700.0);
+    fn shared_gui_size_applies_unicode_and_rounds_up() {
         assert_eq!(
-            creation_size(size),
-            if cfg!(target_os = "ios") { None } else { Some(size) }
+            GuiSize::new([960, 720], 3, false),
+            GuiSize {
+                scale: 3,
+                size: [320, 240]
+            }
+        );
+        assert_eq!(
+            GuiSize::new([960, 720], 3, true),
+            GuiSize {
+                scale: 4,
+                size: [240, 180]
+            }
+        );
+        assert_eq!(
+            GuiSize::new([1921, 1081], 0, false),
+            GuiSize {
+                scale: 4,
+                size: [481, 271]
+            }
+        );
+        assert_eq!(
+            GuiSize::new([853, 479], 0, true),
+            GuiSize {
+                scale: 2,
+                size: [427, 240]
+            }
+        );
+        assert_eq!(
+            GuiSize::new([3840, 2160], 0, true),
+            GuiSize {
+                scale: 10,
+                size: [384, 216]
+            }
         );
     }
 
@@ -1080,5 +1111,16 @@ mod tests {
         assert_eq!(list.refresh(None, &mut modes), Some(vec![]));
         assert_eq!(list.refresh(Some(2), &mut modes), Some(vec![mode(2)]));
         assert_eq!(listings, 3);
+    }
+
+    #[test]
+    fn with_icon_enforces_vanilla_minimum_inner_size() {
+        let attrs = with_icon(winit::window::Window::default_attributes());
+        assert_eq!(
+            attrs.min_inner_size,
+            Some(winit::dpi::Size::Logical(winit::dpi::LogicalSize::new(
+                320.0f64, 240.0f64
+            )))
+        );
     }
 }
