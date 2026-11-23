@@ -81,9 +81,20 @@ jobs:
         if: steps.lib.outputs.cache-hit != 'true'
         working-directory: horizon
         run: |
-          cargo build --locked --release --target ${{ matrix.rust }} -p horizon-ios-bridge
+          set -o pipefail
+          cargo build --locked --release --target ${{ matrix.rust }} --message-format=short -p horizon-ios-bridge 2>&1 | tee ../cargo-build.log
           mkdir -p ../platform/ios/build/rust/${{ matrix.dir }}
           cp target/${{ matrix.rust }}/release/libhorizon_ios_bridge.a ../platform/ios/build/rust/${{ matrix.dir }}/
+      # Same idea for the Rust build: the first compiler errors become annotations (the log itself is not reachable
+      # from every tool). `--message-format=short` makes each error one line with its file and position.
+      - name: Report Rust compiler errors as annotations
+        if: failure()
+        run: |
+          [ -f cargo-build.log ] || exit 0
+          grep -E "error(\[E[0-9]+\])?:" cargo-build.log | sed -E 's#^.*/horizon/##' | sort -u | head -45 | while IFS= read -r l; do
+            echo "::error title=cargo::$(printf '%s' "$l" | cut -c1-500)"
+          done || true
+          grep -E "^(error|warning: unused)" cargo-build.log | head -3 || true
       - name: Check the library is present
         run: ls -la platform/ios/build/rust/${{ matrix.dir }}/libhorizon_ios_bridge.a
       - name: Generate the Xcode project
