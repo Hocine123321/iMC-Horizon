@@ -690,6 +690,10 @@ Files new to the list in S: `horizon/crates/horizon-client-render/src/gfx/device
 `horizon/crates/horizon-client-render/src/options_ui/layout.rs` (`grey_unused`), `horizon/crates/horizon-client/src/game/ios/.game-area` (the area marker)
 and `horizon/crates/horizon-mod-package/src/selection/context.rs` (`data_dir_with`, Apple).
 
+CI found the next gap and it is fixed here: `horizon/crates/horizon-mod-package/src/lib.rs` gets a `holder` module for platforms other than Linux, macOS and Windows
+(`enter()` does nothing, `acquire()` returns `None`; `horizon-client`'s `entry::prepare` calls both), and `horizon/crates/horizon-mod-package/src/runtime_leases.rs` builds
+`lease_units` only on those three (its only caller is the dedicated server, which iOS does not build).
+
 Known gaps, not yet done: `horizon-mod-package/src/runtime_leases/filesystem.rs` answers "unsupported filesystem" on iOS (it lists Linux, macOS and
 Windows only), and `holder` / `local_control` are compiled only on those three; the new mod runtime will need both for iOS.
 

@@ -10,6 +10,22 @@ pub mod game_identity;
     any(target_os = "linux", target_os = "macos", windows)
 ))]
 pub mod holder;
+/// iMC (iOS): the holder supervises native-mod processes through fork/exec and process groups, which an
+/// iOS app cannot do, so nothing is held: `enter` returns at once and `acquire` takes no output capture.
+/// The same two calls `horizon-client`'s `entry::prepare` makes, kept so that file stays as upstream has it.
+#[cfg(all(
+    feature = "runtime-process",
+    not(any(target_os = "linux", target_os = "macos", windows))
+))]
+pub mod holder {
+    use crate::selection::LaunchArguments;
+
+    pub fn enter() {}
+
+    pub fn acquire(_launch: &LaunchArguments) -> Option<crate::output::Capture> {
+        None
+    }
+}
 pub mod icon;
 #[cfg(feature = "index")]
 pub mod index;
