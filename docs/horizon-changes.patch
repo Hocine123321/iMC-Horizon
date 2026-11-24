@@ -12595,6 +12595,45 @@ index 0c399b88..b222b803 100644
  mod tests {
      #[test]
      fn the_frame_average_is_sent_as_unknown() {
+diff --git a/horizon/crates/horizon-mod-package/src/lib.rs b/horizon/crates/horizon-mod-package/src/lib.rs
+index 0f50bb53..f4b3a7e3 100644
+--- a/horizon/crates/horizon-mod-package/src/lib.rs
++++ b/horizon/crates/horizon-mod-package/src/lib.rs
+@@ -10,6 +10,22 @@ pub mod game_identity;
+     any(target_os = "linux", target_os = "macos", windows)
+ ))]
+ pub mod holder;
++/// iMC (iOS): the holder supervises native-mod processes through fork/exec and process groups, which an
++/// iOS app cannot do, so nothing is held: `enter` returns at once and `acquire` takes no output capture.
++/// The same two calls `horizon-client`'s `entry::prepare` makes, kept so that file stays as upstream has it.
++#[cfg(all(
++    feature = "runtime-process",
++    not(any(target_os = "linux", target_os = "macos", windows))
++))]
++pub mod holder {
++    use crate::selection::LaunchArguments;
++
++    pub fn enter() {}
++
++    pub fn acquire(_launch: &LaunchArguments) -> Option<crate::output::Capture> {
++        None
++    }
++}
+ pub mod icon;
+ #[cfg(feature = "index")]
+ pub mod index;
+diff --git a/horizon/crates/horizon-mod-package/src/runtime_leases.rs b/horizon/crates/horizon-mod-package/src/runtime_leases.rs
+index 2d137d54..d9187b06 100644
+--- a/horizon/crates/horizon-mod-package/src/runtime_leases.rs
++++ b/horizon/crates/horizon-mod-package/src/runtime_leases.rs
+@@ -419,6 +419,7 @@ pub fn write_completion(directory: &Path) -> io::Result<()> {
+     }
+ }
+ 
++#[cfg(any(target_os = "linux", target_os = "macos", windows))]
+ /// Registers and holds the units a game started from `executable` leases by itself: what the
+ /// launcher's launch and the dedicated server's supervisor both need where the game takes no
+ /// holder. The claims must live as long as the game.
 diff --git a/horizon/crates/horizon-mod-package/src/selection/context.rs b/horizon/crates/horizon-mod-package/src/selection/context.rs
 index f4e6e81b..549ee40e 100644
 --- a/horizon/crates/horizon-mod-package/src/selection/context.rs
