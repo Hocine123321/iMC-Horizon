@@ -2335,7 +2335,7 @@ index 00000000..66b2f672
 +    }
 +}
 diff --git a/horizon/crates/horizon-client-input/src/keybinds.rs b/horizon/crates/horizon-client-input/src/keybinds.rs
-index c2ceb0f1..a2f41c11 100644
+index c2ceb0f1..61b8b63a 100644
 --- a/horizon/crates/horizon-client-input/src/keybinds.rs
 +++ b/horizon/crates/horizon-client-input/src/keybinds.rs
 @@ -304,6 +304,7 @@ pub use horizon_client_core::key_display::{
@@ -2362,6 +2362,26 @@ index c2ceb0f1..a2f41c11 100644
          Key::Character(text) => learn(name, &text),
          Key::Dead(Some(c)) => learn(name, c.encode_utf8(&mut [0; 4])),
          _ => {}
+@@ -361,6 +369,8 @@ pub fn layout_key_name(
+ /// doesn't identify; 0 when there is neither. Stable within a platform only.
+ pub fn raw_key_code(physical: winit::keyboard::PhysicalKey) -> u32 {
+     use winit::keyboard::{NativeKeyCode, PhysicalKey};
++    // winit has no scan-code extension on iOS (iMC), and an iPhone has no keyboard whose keys need telling apart.
++    #[cfg(not(target_os = "ios"))]
+     use winit::platform::scancode::PhysicalKeyExtScancode;
+     match physical {
+         PhysicalKey::Unidentified(native) => match native {
+@@ -368,7 +378,10 @@ pub fn raw_key_code(physical: winit::keyboard::PhysicalKey) -> u32 {
+             NativeKeyCode::MacOS(c) | NativeKeyCode::Windows(c) => c.into(),
+             NativeKeyCode::Unidentified => 0,
+         },
++        #[cfg(not(target_os = "ios"))]
+         PhysicalKey::Code(_) => physical.to_scancode().unwrap_or(0),
++        #[cfg(target_os = "ios")]
++        PhysicalKey::Code(_) => 0,
+     }
+ }
+ 
 diff --git a/horizon/crates/horizon-client-input/src/lib.rs b/horizon/crates/horizon-client-input/src/lib.rs
 index ff26ae1b..f448d625 100644
 --- a/horizon/crates/horizon-client-input/src/lib.rs
