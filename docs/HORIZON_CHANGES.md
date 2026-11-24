@@ -694,6 +694,8 @@ CI found the next gap and it is fixed here: `horizon/crates/horizon-mod-package/
 (`enter()` does nothing, `acquire()` returns `None`; `horizon-client`'s `entry::prepare` calls both), and `horizon/crates/horizon-mod-package/src/runtime_leases.rs` builds
 `lease_units` only on those three (its only caller is the dedicated server, which iOS does not build).
 
+Second CI finding: `horizon/crates/horizon-client-input/src/keybinds.rs` (`raw_key_code`) uses winit's scan-code extension, which does not exist on iOS; on iOS a known key's code is 0.
+
 Known gaps, not yet done: `horizon-mod-package/src/runtime_leases/filesystem.rs` answers "unsupported filesystem" on iOS (it lists Linux, macOS and
 Windows only), and `holder` / `local_control` are compiled only on those three; the new mod runtime will need both for iOS.
 
