@@ -3,17 +3,17 @@
 //! winit's `EventLoop::run_app` calls `UIApplicationMain` itself on iOS, so the Xcode project
 //! declares no app delegate: its `main` calls [`horizon_ios_main`] with the process's own
 //! `argc` and `argv`, and this hands them to the same startup every desktop build runs
-//! (`horizon_client::entry::main`, which reads `std::env::args()`).
+//! (`horizon_client::entry::prepare`, which reads `std::env::args()`).
 //!
-//! The global allocator is the executable's job in this repository (`crates/horizon-client/src/main.rs`),
-//! so it is set here too: a static library has the same single owner for it.
+//! The global allocator is the game library's (`horizon-client`), so this crate sets none.
+//!
+//! Startup is what `horizon-game`'s `main` does on desktop, without the two steps that need a process of
+//! its own: `horizon_client::entry::prepare()`, then the mod host's `main_with` (no mods are built into the
+//! app; the mod host is where the code runtime for mods plugs in). `horizon_guest_stack::prepare_main`
+//! and the compiler child are left out: an iPhone's main thread cannot be re-executed with a bigger stack.
 
 // The one `unsafe` this crate needs is the exported symbol's attribute.
 #![allow(unsafe_code)]
-
-#[cfg(not(any(feature = "system-allocator", feature = "alloc-census")))]
-#[global_allocator]
-static ALLOCATOR: horizon_threads::Allocator = horizon_threads::ALLOCATOR;
 
 /// Starts the game and does not return until it ends (winit's `run_app` never returns on iOS).
 ///
@@ -24,7 +24,8 @@ pub extern "C" fn horizon_ios_main() {
     let _ = horizon_client::gfx::BREADCRUMB.set(breadcrumb);
     // Quit Game under in-process Play tells the shell here once the engine is Idle (a no-op until the shell allows it).
     horizon_client::ios_hold::set_idle_notifier(idle_notifier);
-    horizon_client::entry::main();
+    let startup = horizon_client::entry::prepare();
+    horizon_mod_host::main_with(Vec::new(), &[], &[], startup);
 }
 
 /// Play without closing the app (docs/IN_PROCESS_PLAY_DESIGN.md, M24 stage 3): call this before

@@ -2234,7 +2234,7 @@ name = "horizon-ios-bridge"
 version = "0.1.0"
 dependencies = [
  "horizon-client",
- "horizon-threads",
+ "horizon-mod-host",
 ]
 
 [[package]]

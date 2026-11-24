@@ -700,6 +700,8 @@ Third CI finding, in the files we already edit: `horizon/crates/horizon-client-r
 
 Fourth CI finding, `horizon-client`: `horizon/crates/horizon-client/src/game/runtime/window_handler.rs` takes the layout key from `logical_key` on iOS (winit has no `modifier_supplement` there); `horizon/crates/horizon-client/src/game/ios/touch.rs` reads the GUI scale as the number `gui_scale()` now returns; and a line that my merge of `finish_started` in `loading_screen.rs` had duplicated is gone.
 
+Fifth CI finding, the iOS bridge (`horizon/platform/ios-bridge`): upstream moved the global allocator into `horizon-client`'s library and replaced `entry::main` with `entry::prepare` + the mod host's `main_with` (what `horizon-game`'s `main` calls). The bridge sets no allocator and starts the engine the same way, skipping `horizon_guest_stack::prepare_main` and the compiler child (an iPhone's main thread cannot be re-executed). It now depends on `horizon-mod-host`, which brings the WASM runtime (`horizon-mod-wasm`, wasmtime) into the iOS build.
+
 Known gaps, not yet done: `horizon-mod-package/src/runtime_leases/filesystem.rs` answers "unsupported filesystem" on iOS (it lists Linux, macOS and
 Windows only), and `holder` / `local_control` are compiled only on those three; the new mod runtime will need both for iOS.
 

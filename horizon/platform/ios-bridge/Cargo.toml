@@ -12,7 +12,7 @@ crate-type = ["staticlib", "rlib"]
 
 [dependencies]
 horizon-client = { path = "../../crates/horizon-client" }
-horizon-threads = { path = "../../crates/horizon-threads" }
+horizon-mod-host = { path = "../../crates/horizon-mod-host", default-features = false }
 
 [lints]
 workspace = true
