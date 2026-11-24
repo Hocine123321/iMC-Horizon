@@ -149,7 +149,9 @@ pub fn opt(o: Opt) -> Option<Reason> {
         | DirectionalAudio
         | MusicToast
         | TextureFiltering
-        | MaxAnisotropy => None,
+        | MaxAnisotropy
+        // A setting a mod adds (the mod runtime is not on the phone yet).
+        | ModSetting(..) => None,
     }
 }
 
@@ -161,7 +163,7 @@ pub fn graphics(h: H) -> Option<Reason> {
         PresentMode | Pacing | GraphicsApi => Some(SYSTEM),
         // HDR output is a Vulkan path in the engine; the port has no HDR yet.
         Hdr | HdrBlackLevel | HdrCalibrate | HdrPeak | HdrPaperWhite | HdrUiBrightness
-        | HdrLighting | HdrSmoothGradients => Some(NOT_ON_IOS),
+        | HdrColorBoost | HdrLook => Some(NOT_ON_IOS),
         // Everything else is the picture, the work done per frame, or the cache.
         ShaderPacks
         | BlueMapAutoDetect

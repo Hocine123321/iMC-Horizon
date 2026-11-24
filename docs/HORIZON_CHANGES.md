@@ -696,6 +696,8 @@ CI found the next gap and it is fixed here: `horizon/crates/horizon-mod-package/
 
 Second CI finding: `horizon/crates/horizon-client-input/src/keybinds.rs` (`raw_key_code`) uses winit's scan-code extension, which does not exist on iOS; on iOS a known key's code is 0.
 
+Third CI finding, in the files we already edit: `horizon/crates/horizon-client-render/src/ios_unused.rs` follows upstream's renamed HDR settings (`HdrColorBoost`, `HdrLook` replace `HdrLighting`, `HdrSmoothGradients`) and the new `Opt::ModSetting`; `horizon/crates/horizon-client-render/src/options_ui.rs` dereferences the touch extra buttons (the options screen's `Act` is now matched by reference).
+
 Known gaps, not yet done: `horizon-mod-package/src/runtime_leases/filesystem.rs` answers "unsupported filesystem" on iOS (it lists Linux, macOS and
 Windows only), and `holder` / `local_control` are compiled only on those three; the new mod runtime will need both for iOS.
 

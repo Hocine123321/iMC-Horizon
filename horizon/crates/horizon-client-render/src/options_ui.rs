@@ -3568,11 +3568,11 @@ impl OptionsUi {
                             }
                         }
                         Act::TouchExtra(e) => {
-                            s.touch_extras.toggle(e);
+                            s.touch_extras.toggle(*e);
                             events.push(Event::Changed);
                         }
                         Act::TouchExtraKey(e) => {
-                            s.touch_extras.step_key(e);
+                            s.touch_extras.step_key(*e);
                             events.push(Event::Changed);
                         }
                         Act::PlayMusicTrack(event, track) => {
