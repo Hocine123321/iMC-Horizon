@@ -236,7 +236,12 @@ jobs:
           python3 -m venv /tmp/stackcheck
           /tmp/stackcheck/bin/pip install --quiet lief capstone
           APP=$(find platform/ios/build/dd -name Horizon.app -maxdepth 6 | head -1)
-          /tmp/stackcheck/bin/python tools/check_stack_budget.py "$APP/Horizon" 760
+          set +e
+          /tmp/stackcheck/bin/python tools/check_stack_budget.py "$APP/Horizon" 760 2>&1 | tee /tmp/stack.txt
+          rc=${PIPESTATUS[0]}
+          # The per-frame table as one annotation, so a failing run says which frame grew.
+          echo "::notice title=stack frames::$(tr '\n' '|' < /tmp/stack.txt | sed 's/%/%25/g')"
+          exit $rc
       - uses: actions/upload-artifact@v4
         if: matrix.sdk == 'iphoneos' && steps.stack.outcome == 'success'
         with:
