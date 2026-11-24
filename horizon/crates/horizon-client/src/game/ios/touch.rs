@@ -695,7 +695,7 @@ impl Game<'_> {
             })
             .collect();
         // The nine hotbar slots follow the pads: an index of the pads' count or more is a slot.
-        if let Some(scale) = self.gui_scale().map(|b| b.scale) {
+        if let Some(scale) = self.gui_scale().map(|scale| scale as f32) {
             rects.extend(hotbar_slots(size, scale, HOTBAR_LIFT));
         }
         for r in &mut rects {

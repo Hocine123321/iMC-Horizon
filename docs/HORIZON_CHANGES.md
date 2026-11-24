@@ -698,6 +698,8 @@ Second CI finding: `horizon/crates/horizon-client-input/src/keybinds.rs` (`raw_k
 
 Third CI finding, in the files we already edit: `horizon/crates/horizon-client-render/src/ios_unused.rs` follows upstream's renamed HDR settings (`HdrColorBoost`, `HdrLook` replace `HdrLighting`, `HdrSmoothGradients`) and the new `Opt::ModSetting`; `horizon/crates/horizon-client-render/src/options_ui.rs` dereferences the touch extra buttons (the options screen's `Act` is now matched by reference).
 
+Fourth CI finding, `horizon-client`: `horizon/crates/horizon-client/src/game/runtime/window_handler.rs` takes the layout key from `logical_key` on iOS (winit has no `modifier_supplement` there); `horizon/crates/horizon-client/src/game/ios/touch.rs` reads the GUI scale as the number `gui_scale()` now returns; and a line that my merge of `finish_started` in `loading_screen.rs` had duplicated is gone.
+
 Known gaps, not yet done: `horizon-mod-package/src/runtime_leases/filesystem.rs` answers "unsupported filesystem" on iOS (it lists Linux, macOS and
 Windows only), and `holder` / `local_control` are compiled only on those three; the new mod runtime will need both for iOS.
 

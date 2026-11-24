@@ -508,7 +508,6 @@ impl Loading {
         renderer_ms: u128,
         game_ms: u128,
     ) -> Result<Option<Box<split::Split<'static>>>> {
-        game.window = Some(window);
         game.renderer = Some(renderer);
         game.resize_state = Some(game.resize_state_of(window.inner_size()));
         game.window = Some(window);
