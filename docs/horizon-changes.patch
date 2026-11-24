@@ -9701,7 +9701,7 @@ index 00000000..1b72e1c3
 +}
 diff --git a/horizon/crates/horizon-client/src/game/ios/touch.rs b/horizon/crates/horizon-client/src/game/ios/touch.rs
 new file mode 100644
-index 00000000..c41b0189
+index 00000000..dd0969d3
 --- /dev/null
 +++ b/horizon/crates/horizon-client/src/game/ios/touch.rs
 @@ -0,0 +1,1032 @@
@@ -10402,7 +10402,7 @@ index 00000000..c41b0189
 +            })
 +            .collect();
 +        // The nine hotbar slots follow the pads: an index of the pads' count or more is a slot.
-+        if let Some(scale) = self.gui_scale().map(|b| b.scale) {
++        if let Some(scale) = self.gui_scale().map(|scale| scale as f32) {
 +            rects.extend(hotbar_slots(size, scale, HOTBAR_LIFT));
 +        }
 +        for r in &mut rects {
@@ -11880,7 +11880,7 @@ index 1bf6a360..981443b5 100644
          } else if o.session_stdin {
              let mut text = String::new();
 diff --git a/horizon/crates/horizon-client/src/game/runtime/loading_screen.rs b/horizon/crates/horizon-client/src/game/runtime/loading_screen.rs
-index 8489455d..10bf742c 100644
+index 8489455d..291a26a6 100644
 --- a/horizon/crates/horizon-client/src/game/runtime/loading_screen.rs
 +++ b/horizon/crates/horizon-client/src/game/runtime/loading_screen.rs
 @@ -112,9 +112,14 @@ impl Loading {
@@ -12066,7 +12066,7 @@ index 8489455d..10bf742c 100644
              res,
              loaded.pack,
              gui,
-@@ -393,12 +480,35 @@ impl Loading {
+@@ -393,12 +480,34 @@ impl Loading {
              loaded.game_cpu,
              std::mem::take(&mut loaded.client_applies),
              loaded.entity_models,
@@ -12101,11 +12101,10 @@ index 8489455d..10bf742c 100644
 +        renderer_ms: u128,
 +        game_ms: u128,
 +    ) -> Result<Option<Box<split::Split<'static>>>> {
-+        game.window = Some(window);
          game.renderer = Some(renderer);
          game.resize_state = Some(game.resize_state_of(window.inner_size()));
          game.window = Some(window);
-@@ -420,27 +530,158 @@ impl Loading {
+@@ -420,27 +529,158 @@ impl Loading {
              renderer_ms,
              game_ms
          );
@@ -12177,7 +12176,7 @@ index 8489455d..10bf742c 100644
 +    /// `Loading` exactly as a first start does. Never entered unless the shell allowed it (`ios_hold`), so every
 +    /// other build and run only ever has the two states above (docs/IN_PROCESS_PLAY_DESIGN.md).
 +    Idle,
- }
++}
 +
 +/// What a new `Loading` needs, kept from the first start of an armed (in-process) run, so Quit Game can come back
 +/// here and the next Play can start over. The main thread owns it (winit's loop), hence a thread-local.
@@ -12237,7 +12236,7 @@ index 8489455d..10bf742c 100644
 +            event_loop.exit();
 +        }
 +    }
-+}
+ }
 +
  impl ApplicationHandler for App {
      fn resumed(&mut self, event_loop: &ActiveEventLoop) {
@@ -12265,7 +12264,7 @@ index 8489455d..10bf742c 100644
          }
      }
      fn device_event(&mut self, event_loop: &ActiveEventLoop, id: DeviceId, event: DeviceEvent) {
-@@ -454,11 +695,31 @@ impl ApplicationHandler for App {
+@@ -454,11 +694,31 @@ impl ApplicationHandler for App {
              Ready(Box<split::Split<'static>>),
              Done,
              Failed(Box<dyn std::error::Error>),
@@ -12298,7 +12297,7 @@ index 8489455d..10bf742c 100644
              }
              App::Loading(loading) => {
                  loading.about_to_wait(event_loop);
-@@ -466,22 +727,28 @@ impl ApplicationHandler for App {
+@@ -466,22 +726,28 @@ impl ApplicationHandler for App {
                      event_loop.exit();
                      return;
                  }
@@ -12503,7 +12502,7 @@ index 5c3f39c4..35d11d83 100644
          Err(e) => Err(e),
      }
 diff --git a/horizon/crates/horizon-client/src/game/runtime/window_handler.rs b/horizon/crates/horizon-client/src/game/runtime/window_handler.rs
-index 3ce0640b..f7cb31c2 100644
+index 3ce0640b..5faf3eb9 100644
 --- a/horizon/crates/horizon-client/src/game/runtime/window_handler.rs
 +++ b/horizon/crates/horizon-client/src/game/runtime/window_handler.rs
 @@ -337,6 +337,8 @@ impl Game<'_> {
@@ -12546,6 +12545,31 @@ index 3ce0640b..f7cb31c2 100644
                  .with_fullscreen(fullscreen.then_some(winit::window::Fullscreen::Borderless(None)))
                  .with_visible(!self.options.offscreen)
                  .with_active(!agent_started),
+@@ -459,15 +474,20 @@ impl ApplicationHandler for Game<'_> {
+         };
+         self.handle_window_event(event_loop, id, event, input_trace::InputOrigin::User);
+         if let Some((event, modifiers)) = key {
++            // winit has no `modifier_supplement` on iOS (iMC): the key as typed stands in, and a phone has no
++            // keyboard layout to tell apart from it.
++            #[cfg(not(target_os = "ios"))]
+             use winit::platform::modifier_supplement::KeyEventExtModifierSupplement;
+             let name = match event.physical_key {
+                 PhysicalKey::Code(code) => horizon_client::keybinds::key_name(code),
+                 PhysicalKey::Unidentified(_) => None,
+             };
+-            let layout_key = horizon_client::keybinds::layout_key_name(
+-                event.physical_key,
+-                &event.key_without_modifiers(),
+-            );
++            #[cfg(not(target_os = "ios"))]
++            let without_modifiers = event.key_without_modifiers();
++            #[cfg(target_os = "ios")]
++            let without_modifiers = event.logical_key.clone();
++            let layout_key =
++                horizon_client::keybinds::layout_key_name(event.physical_key, &without_modifiers);
+             let raw_code = horizon_client::keybinds::raw_key_code(event.physical_key);
+             let action = match (event.state, event.repeat) {
+                 (winit::event::ElementState::Released, _) => mod_api::KeyAction::Release,
 diff --git a/horizon/crates/horizon-client/src/game/world/world_session.rs b/horizon/crates/horizon-client/src/game/world/world_session.rs
 index 99c50e7e..7455a91d 100644
 --- a/horizon/crates/horizon-client/src/game/world/world_session.rs
