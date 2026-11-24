@@ -7568,10 +7568,10 @@ index 2398e85b..28fa7678 100644
      opened.horizon.hdr = HdrMode::Auto;
 diff --git a/crates/horizon-client-render/src/ios_unused.rs b/crates/horizon-client-render/src/ios_unused.rs
 new file mode 100644
-index 00000000..8223117d
+index 00000000..44fe44a8
 --- /dev/null
 +++ b/crates/horizon-client-render/src/ios_unused.rs
-@@ -0,0 +1,271 @@
+@@ -0,0 +1,273 @@
 +//! Settings that mean nothing on an iPhone (iMC Settings > "Grey out unused settings").
 +//!
 +//! Horizon is a desktop game, and most of its settings page is about a keyboard, a mouse, a
@@ -7723,7 +7723,9 @@ index 00000000..8223117d
 +        | DirectionalAudio
 +        | MusicToast
 +        | TextureFiltering
-+        | MaxAnisotropy => None,
++        | MaxAnisotropy
++        // A setting a mod adds (the mod runtime is not on the phone yet).
++        | ModSetting(..) => None,
 +    }
 +}
 +
@@ -7735,7 +7737,7 @@ index 00000000..8223117d
 +        PresentMode | Pacing | GraphicsApi => Some(SYSTEM),
 +        // HDR output is a Vulkan path in the engine; the port has no HDR yet.
 +        Hdr | HdrBlackLevel | HdrCalibrate | HdrPeak | HdrPaperWhite | HdrUiBrightness
-+        | HdrLighting | HdrSmoothGradients => Some(NOT_ON_IOS),
++        | HdrColorBoost | HdrLook => Some(NOT_ON_IOS),
 +        // Everything else is the picture, the work done per frame, or the cache.
 +        ShaderPacks
 +        | BlueMapAutoDetect
@@ -8116,7 +8118,7 @@ index 00000000..ba273a4a
 +    }
 +}
 diff --git a/crates/horizon-client-render/src/options_ui.rs b/crates/horizon-client-render/src/options_ui.rs
-index 2d77a9f4..93a45524 100644
+index 2d77a9f4..e81461bd 100644
 --- a/crates/horizon-client-render/src/options_ui.rs
 +++ b/crates/horizon-client-render/src/options_ui.rs
 @@ -1510,6 +1510,12 @@ pub enum Page {
@@ -8359,11 +8361,11 @@ index 2d77a9f4..93a45524 100644
                              }
                          }
 +                        Act::TouchExtra(e) => {
-+                            s.touch_extras.toggle(e);
++                            s.touch_extras.toggle(*e);
 +                            events.push(Event::Changed);
 +                        }
 +                        Act::TouchExtraKey(e) => {
-+                            s.touch_extras.step_key(e);
++                            s.touch_extras.step_key(*e);
 +                            events.push(Event::Changed);
 +                        }
                          Act::PlayMusicTrack(event, track) => {
