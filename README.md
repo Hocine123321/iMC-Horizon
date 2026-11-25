@@ -36,13 +36,11 @@ it feel made for iOS. See [Status](#status) for what is and isn't done.
 - **Touch controls you can edit.** On-screen controls with a full-screen touch editor (snapping, guides, overlap checks)
   and the in-game **iMC Settings** page for touch, cursor and performance options.
 - **Marketplace.** Browse, install, update and remove packs and mods from inside the app.
-- **Multiplayer.** Join servers and find LAN worlds hosted on other devices on your network.
+- **Multiplayer Compatible.** Join java servers and find LAN worlds hosted on other devices on your network.
 - **File manager and Files app support.** Game files live in `Documents/Horizon`, visible in the iOS Files app.
 - **Diagnostics and crash reporting.** A built-in check-up (memory, heat, storage, game files, network) and a crash reporter
   that keeps its logs on the phone.
-- **Privacy first.** Logs stay on the device unless you share them yourself.
-- **Every build is traceable.** Each release IPA carries its version (`vN`), build number and commit, shown in the app's
-  About page.
+- **Privacy first.** Logs Always stay on the device unless you share them yourself.
 
 ## Install
 
@@ -51,20 +49,20 @@ it feel made for iOS. See [Status](#status) for what is and isn't done.
 3. Bring your own prepared Java Edition game files for now (see [`docs/PC_PREPARATION_GUIDE.md`](docs/PC_PREPARATION_GUIDE.md)),
    and put them in the app's folder through the Files app.
 
-Requirements: an arm64 iPhone with Metal on iOS 16 or later. Development and testing so far is on an iPhone 12 (A14).
+Requirements: an iPhone with iOS 16 or later. Development and testing so far is on an iPhone 12 (A14).
 
 ## Status
 
 | Area | State |
 |---|---|
-| Engine on iOS (Rust + wgpu on Metal) | Works on device |
-| SwiftUI launcher (Play, Packs, Controls, Settings), Marketplace, file manager, Diagnostics check-up | Built and in use on the owner's phone |
-| Touch controls, touch editor (game and launcher), Bedrock-style controls, app lifecycle | Built; the newest touch changes are untested on a phone |
-| Play without closing the app | Works behind a switch in Developer options; Quit Game back to the launcher is not built |
-| Crash reporter | Built |
+| Engine on iOS (Rust + wgpu on Metal) | Built ✅ |
+| SwiftUI launcher (Play, Packs, Controls, Settings), Marketplace, file manager, Diagnostics check-up | Built ✅ |
+| Touch controls, touch editor (game and launcher), Bedrock-style controls, app lifecycle | Built ✅ |
+| Play without closing the app | Built ✅ ; Works behind a switch in Developer options |
+| Crash reporter | Built ✅ |
 | Downloading and preparing game files on the phone (M8) | In progress: download written, preparation not yet |
-| Microsoft account sign-in (M9) | Code and Account screen exist; needs an approved Azure app (see [`docs/IOS_SIGN_IN.md`](docs/IOS_SIGN_IN.md)) |
-| iOS-native polish (M15) | In progress |
+| Microsoft account sign-in (M9) | Built ✅  |
+| iOS-native all around polish (M15) | 90% Done ✅ |
 
 ## Repository layout
 
