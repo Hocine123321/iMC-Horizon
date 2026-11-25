@@ -11880,7 +11880,7 @@ index 1bf6a360..981443b5 100644
          } else if o.session_stdin {
              let mut text = String::new();
 diff --git a/crates/horizon-client/src/game/runtime/loading_screen.rs b/crates/horizon-client/src/game/runtime/loading_screen.rs
-index 8489455d..291a26a6 100644
+index 8489455d..1f74a742 100644
 --- a/crates/horizon-client/src/game/runtime/loading_screen.rs
 +++ b/crates/horizon-client/src/game/runtime/loading_screen.rs
 @@ -112,9 +112,14 @@ impl Loading {
@@ -11975,18 +11975,24 @@ index 8489455d..291a26a6 100644
          let Some(size) = self
              .renderer
              .as_ref()
-@@ -312,9 +347,17 @@ impl Loading {
+@@ -312,9 +347,23 @@ impl Loading {
              );
          }
      }
 -    pub(super) fn finish(&mut self, mut loaded: Loaded) -> Result<Option<split::Split<'static>>> {
-+    // Not inlined, and small: it builds the world renderer, so on iOS (1 MB of main-thread stack)
-+    // it must not hold the `Game` that `finish_game` creates afterwards. rustc reserves a
-+    // function's whole frame on entry, so the two halves are two functions
-+    // (docs/IOS_CRASH_STACK.md).
++    // Not inlined, and small: on iOS (1 MB of main-thread stack) it must hold neither a renderer nor the
++    // `Game`. rustc reserves a function's whole frame on entry, so `finish_renderer` (three copies of the
++    // 59 KB `Renderer` in its frame) returns, with a boxed `Handoff`, before `finish_game` (which holds the
++    // 186 KB `Game`) is called: their frames are never on the stack together (docs/IOS_CRASH_STACK.md).
 +    #[inline(never)]
-+    pub(super) fn finish(&mut self, mut loaded: Loaded) -> Result<Option<Box<split::Split<'static>>>> {
++    pub(super) fn finish(&mut self, loaded: Loaded) -> Result<Option<Box<split::Split<'static>>>> {
 +        horizon_client::gfx::breadcrumb("finish: starting the game");
++        let (handoff, loaded) = self.finish_renderer(loaded)?;
++        self.finish_game(handoff, loaded)
++    }
++    /// The first half of `finish`: the world renderer. Its frame is gone when it returns.
++    #[inline(never)]
++    fn finish_renderer(&mut self, mut loaded: Loaded) -> Result<(Box<Handoff>, Loaded)> {
          let handoff_at = Instant::now();
          let mut options = self.options.take().ok_or("loading already finished")?;
 +        // iMC (iOS): the account the launcher wrote at Play (a no-op unless the hold was armed).
@@ -11994,7 +12000,7 @@ index 8489455d..291a26a6 100644
          options.resources = loaded.root.clone();
          // StartupMenu owns world selection until it can hand it to Game.
          options.world = None;
-@@ -332,6 +375,7 @@ impl Loading {
+@@ -332,6 +381,7 @@ impl Loading {
              }
          }
          let renderer_at = Instant::now();
@@ -12002,26 +12008,26 @@ index 8489455d..291a26a6 100644
          let renderer = startup::time("renderer.world", || {
              build_renderer(
                  window.clone(),
-@@ -359,7 +403,40 @@ impl Loading {
+@@ -359,7 +409,40 @@ impl Loading {
              "Horizon: world renderer ready after {} ms",
              self.started.elapsed().as_millis()
          );
 +        horizon_client::gfx::breadcrumb("finish: world renderer ready");
          let renderer_ms = renderer_at.elapsed().as_millis();
-+        self.finish_game(
-+            Handoff {
++        Ok((
++            Box::new(Handoff {
 +                options,
 +                gui,
 +                window,
 +                renderer,
 +                handoff_at,
 +                renderer_ms,
-+            },
++            }),
 +            Loaded {
 +                renderer_cpu: None,
 +                ..loaded
 +            },
-+        )
++        ))
 +    }
 +    /// The second half of `finish`: the audio device and the game itself. Its frame holds the
 +    /// `Game` (hundreds of kilobytes), which is why it is not part of `finish`: the world
@@ -12029,7 +12035,7 @@ index 8489455d..291a26a6 100644
 +    #[inline(never)]
 +    fn finish_game(
 +        &mut self,
-+        handoff: Handoff,
++        handoff: Box<Handoff>,
 +        mut loaded: Loaded,
 +    ) -> Result<Option<Box<split::Split<'static>>>> {
 +        let Handoff {
@@ -12039,11 +12045,11 @@ index 8489455d..291a26a6 100644
 +            renderer,
 +            handoff_at,
 +            renderer_ms,
-+        } = handoff;
++        } = *handoff;
          // Audio is created on the main thread, after the core is ready.
          let audio = if !options.execution_role.is_client() {
              Audio::silent(&loaded.pack.source)
-@@ -376,10 +453,20 @@ impl Loading {
+@@ -376,10 +459,20 @@ impl Loading {
          let pack_error = loaded.pack_error.or_else(|| self.pack_error.take());
          // The game borrows its shared resources for the process's lifetime,
          // like the single copy an integrated server would share.
@@ -12066,7 +12072,7 @@ index 8489455d..291a26a6 100644
              res,
              loaded.pack,
              gui,
-@@ -393,12 +480,34 @@ impl Loading {
+@@ -393,12 +486,34 @@ impl Loading {
              loaded.game_cpu,
              std::mem::take(&mut loaded.client_applies),
              loaded.entity_models,
@@ -12104,7 +12110,7 @@ index 8489455d..291a26a6 100644
          game.renderer = Some(renderer);
          game.resize_state = Some(game.resize_state_of(window.inner_size()));
          game.window = Some(window);
-@@ -420,27 +529,158 @@ impl Loading {
+@@ -420,27 +535,158 @@ impl Loading {
              renderer_ms,
              game_ms
          );
@@ -12264,7 +12270,7 @@ index 8489455d..291a26a6 100644
          }
      }
      fn device_event(&mut self, event_loop: &ActiveEventLoop, id: DeviceId, event: DeviceEvent) {
-@@ -454,11 +694,31 @@ impl ApplicationHandler for App {
+@@ -454,11 +700,31 @@ impl ApplicationHandler for App {
              Ready(Box<split::Split<'static>>),
              Done,
              Failed(Box<dyn std::error::Error>),
@@ -12297,7 +12303,7 @@ index 8489455d..291a26a6 100644
              }
              App::Loading(loading) => {
                  loading.about_to_wait(event_loop);
-@@ -466,22 +726,28 @@ impl ApplicationHandler for App {
+@@ -466,22 +732,28 @@ impl ApplicationHandler for App {
                      event_loop.exit();
                      return;
                  }
