@@ -32,6 +32,16 @@ CHAIN = [
     ("Game::new_boxed", ("4Game9new_boxed",)),
 ]
 
+# The other half of `finish`: the world renderer. `finish_renderer` returns before `finish_game` is called, so
+# its frame is never on the stack with the Game's; it is checked on its own, with the frames above it.
+RENDERER_PHASE = [
+    ("run_with", ("4game8run_with",)),
+    ("run_loading", ("resource_loader", "11run_loading")),
+    ("App::about_to_wait", ("loading_screen", "3App", "ApplicationHandler13about_to_wait")),
+    ("Loading::finish", ("7Loading6finish",)),
+    ("Loading::finish_renderer", ("7Loading15finish_renderer",)),
+]
+
 
 def main():
     path = sys.argv[1]
@@ -71,6 +81,25 @@ def main():
         total += kb
         print(f"{label:24s} {kb:7.0f}")
     print(f"{'chain total':24s} {total:7.0f}   budget {budget:.0f} (main thread 1008, system frames ~100)")
+    # The renderer phase, with the same frames found the same way.
+    phase, phase_missing = 0.0, []
+    for label, keys in RENDERER_PHASE:
+        found = [s.value for s in m.symbols
+                 if "horizon_client" in s.name and all(k in s.name for k in keys) and s.value in starts]
+        if not found:
+            phase_missing.append(label)
+            print(f"{label:24s} {'?':>7s}  (renderer phase: symbol not found)")
+            continue
+        kb = max(frame(a) for a in found) / 1024
+        phase += kb
+        print(f"{label:24s} {kb:7.0f}  (renderer phase)")
+    print(f"{'renderer phase total':24s} {phase:7.0f}   budget {budget:.0f}")
+    if phase_missing:
+        print(f"::error::symbols not found: {phase_missing} (renderer phase)")
+        return 2
+    if phase > budget:
+        print(f"::error::the renderer phase needs {phase:.0f} KB of stack, budget {budget:.0f} KB")
+        return 1
     if missing:
         print(f"::error::symbols not found: {missing}. The call chain changed; update CHAIN in this script "
               f"(match stable name pieces only, no crate hashes).")

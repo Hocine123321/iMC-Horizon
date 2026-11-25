@@ -77,3 +77,15 @@ startup path then holds a `Game` by value.
 
 `tools/check_stack_budget.py` reads the frame sizes of the chain from the built binary and fails
 the CI run when the total passes 760 KB, so a build that would crash is not published.
+
+## Round 5 (2026-11-23): after moving `horizon/` to upstream 977a053
+
+The check measured 817 KB against 760 (675 KB before the move). `rustc -Zprint-type-sizes` (CI: Run workflow with
+`type_sizes`) gave the sizes: `Renderer` 59 KB, `Handoff` 61 KB, `Game` 186 KB (`Split` 187 KB), `Loaded` 4 KB.
+`Loading::finish` (184 KB) held three renderers: the old one, the new one and the one inside `Handoff`;
+`Game::new_boxed` (380 KB) holds two copies of the `Game`.
+
+First fix: `finish` is now two calls that are not nested. `finish_renderer` builds the renderer and returns a boxed
+`Handoff` (its frame is gone when it returns), then `finish_game` builds the game. `finish` itself is small. The stack
+check measures the renderer phase as a second chain. Not done: building the `Game` in place in `new_boxed` (the other
+186 KB), which is the next step if the chain total is still too high on a phone.

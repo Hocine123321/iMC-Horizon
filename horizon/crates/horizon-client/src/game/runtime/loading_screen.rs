@@ -347,13 +347,19 @@ impl Loading {
             );
         }
     }
-    // Not inlined, and small: it builds the world renderer, so on iOS (1 MB of main-thread stack)
-    // it must not hold the `Game` that `finish_game` creates afterwards. rustc reserves a
-    // function's whole frame on entry, so the two halves are two functions
-    // (docs/IOS_CRASH_STACK.md).
+    // Not inlined, and small: on iOS (1 MB of main-thread stack) it must hold neither a renderer nor the
+    // `Game`. rustc reserves a function's whole frame on entry, so `finish_renderer` (three copies of the
+    // 59 KB `Renderer` in its frame) returns, with a boxed `Handoff`, before `finish_game` (which holds the
+    // 186 KB `Game`) is called: their frames are never on the stack together (docs/IOS_CRASH_STACK.md).
     #[inline(never)]
-    pub(super) fn finish(&mut self, mut loaded: Loaded) -> Result<Option<Box<split::Split<'static>>>> {
+    pub(super) fn finish(&mut self, loaded: Loaded) -> Result<Option<Box<split::Split<'static>>>> {
         horizon_client::gfx::breadcrumb("finish: starting the game");
+        let (handoff, loaded) = self.finish_renderer(loaded)?;
+        self.finish_game(handoff, loaded)
+    }
+    /// The first half of `finish`: the world renderer. Its frame is gone when it returns.
+    #[inline(never)]
+    fn finish_renderer(&mut self, mut loaded: Loaded) -> Result<(Box<Handoff>, Loaded)> {
         let handoff_at = Instant::now();
         let mut options = self.options.take().ok_or("loading already finished")?;
         // iMC (iOS): the account the launcher wrote at Play (a no-op unless the hold was armed).
@@ -405,20 +411,20 @@ impl Loading {
         );
         horizon_client::gfx::breadcrumb("finish: world renderer ready");
         let renderer_ms = renderer_at.elapsed().as_millis();
-        self.finish_game(
-            Handoff {
+        Ok((
+            Box::new(Handoff {
                 options,
                 gui,
                 window,
                 renderer,
                 handoff_at,
                 renderer_ms,
-            },
+            }),
             Loaded {
                 renderer_cpu: None,
                 ..loaded
             },
-        )
+        ))
     }
     /// The second half of `finish`: the audio device and the game itself. Its frame holds the
     /// `Game` (hundreds of kilobytes), which is why it is not part of `finish`: the world
@@ -426,7 +432,7 @@ impl Loading {
     #[inline(never)]
     fn finish_game(
         &mut self,
-        handoff: Handoff,
+        handoff: Box<Handoff>,
         mut loaded: Loaded,
     ) -> Result<Option<Box<split::Split<'static>>>> {
         let Handoff {
@@ -436,7 +442,7 @@ impl Loading {
             renderer,
             handoff_at,
             renderer_ms,
-        } = handoff;
+        } = *handoff;
         // Audio is created on the main thread, after the core is ready.
         let audio = if !options.execution_role.is_client() {
             Audio::silent(&loaded.pack.source)
