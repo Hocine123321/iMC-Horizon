@@ -12589,6 +12589,36 @@ index 99c50e7e..7455a91d 100644
              Action::Quit => {
                  self.begin_closing_save(true)?;
                  event_loop.set_control_flow(ControlFlow::Poll);
+diff --git a/crates/horizon-guest-stack/src/lib.rs b/crates/horizon-guest-stack/src/lib.rs
+index e2da07f9..58cc0664 100644
+--- a/crates/horizon-guest-stack/src/lib.rs
++++ b/crates/horizon-guest-stack/src/lib.rs
+@@ -128,6 +128,10 @@ pub fn check_current() -> Result<(), &'static str> {
+ 
+ const REQUIRED: usize = GUEST_STACK_BYTES + HOST_HEADROOM;
+ 
++/// What a thread that enters a guest needs on iOS: the host's own frames around the interpreter.
++#[cfg(target_os = "ios")]
++const IOS_HOST_STACK_BYTES: usize = 512 * 1024;
++
+ /// A refusal naming what was measured. Leaked once per refusing thread: `check_current` keeps it
+ /// for the thread's life.
+ #[cfg(any(target_os = "linux", target_vendor = "apple", windows))]
+@@ -207,7 +211,13 @@ fn inspect_current() -> Result<(), &'static str> {
+     {
+         // SAFETY: pthread_self names the live calling thread.
+         let size = unsafe { libc::pthread_get_stacksize_np(libc::pthread_self()) };
+-        if size < REQUIRED {
++        // iMC (iOS): mods run on Wasmtime's Pulley interpreter, whose wasm frames live on a heap stack of
++        // its own, so the calling thread needs room for the host side only. The main thread has 1 MiB.
++        #[cfg(target_os = "ios")]
++        let required = IOS_HOST_STACK_BYTES;
++        #[cfg(not(target_os = "ios"))]
++        let required = REQUIRED;
++        if size < required {
+             return too_small(size, "pthread_get_stacksize_np");
+         }
+     }
 diff --git a/crates/horizon-hdr/Cargo.toml b/crates/horizon-hdr/Cargo.toml
 index bd16669b..b610a8ff 100644
 --- a/crates/horizon-hdr/Cargo.toml
@@ -12686,6 +12716,37 @@ index 2d137d54..d9187b06 100644
  /// Registers and holds the units a game started from `executable` leases by itself: what the
  /// launcher's launch and the dedicated server's supervisor both need where the game takes no
  /// holder. The claims must live as long as the game.
+diff --git a/crates/horizon-mod-package/src/runtime_leases/filesystem.rs b/crates/horizon-mod-package/src/runtime_leases/filesystem.rs
+index ac3720de..13447ed1 100644
+--- a/crates/horizon-mod-package/src/runtime_leases/filesystem.rs
++++ b/crates/horizon-mod-package/src/runtime_leases/filesystem.rs
+@@ -3,7 +3,7 @@ use super::Error;
+ use cap_std::fs::Dir;
+ 
+ pub(super) fn local(directory: &Dir) -> Result<(), Error> {
+-    #[cfg(any(target_os = "linux", target_os = "macos"))]
++    #[cfg(any(target_os = "linux", target_vendor = "apple"))]
+     {
+         use std::{mem::MaybeUninit, os::fd::AsRawFd};
+         let mut status = MaybeUninit::<libc::statfs>::zeroed();
+@@ -17,7 +17,7 @@ pub(super) fn local(directory: &Dir) -> Result<(), Error> {
+         // ext*, tmpfs, overlayfs, XFS, Btrfs, ZFS, ramfs, F2FS, FAT and exFAT. Unknown
+         // implementations (including NFS, SMB and FUSE) must not silently inherit trust.
+         let supported = supported_linux(status.f_type as u64);
+-        #[cfg(target_os = "macos")]
++        #[cfg(target_vendor = "apple")]
+         let supported = status.f_flags & libc::MNT_LOCAL as u32 != 0 && {
+             // SAFETY: the kernel's fixed f_fstypename is NUL-terminated.
+             let kind = unsafe { std::ffi::CStr::from_ptr(status.f_fstypename.as_ptr()) };
+@@ -73,7 +73,7 @@ pub(super) fn local(directory: &Dir) -> Result<(), Error> {
+             Err(Error::UnsupportedFilesystem)
+         }
+     }
+-    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
++    #[cfg(not(any(target_os = "linux", target_vendor = "apple", windows)))]
+     {
+         let _ = directory;
+         Err(Error::UnsupportedFilesystem)
 diff --git a/crates/horizon-mod-package/src/selection/context.rs b/crates/horizon-mod-package/src/selection/context.rs
 index f4e6e81b..549ee40e 100644
 --- a/crates/horizon-mod-package/src/selection/context.rs
@@ -12700,6 +12761,65 @@ index f4e6e81b..549ee40e 100644
          if let Some(h) = &home {
              return h.join("Library/Application Support");
          }
+diff --git a/crates/horizon-mod-wasm/src/module_cache.rs b/crates/horizon-mod-wasm/src/module_cache.rs
+index 4d01b0d0..6c9e89b2 100644
+--- a/crates/horizon-mod-wasm/src/module_cache.rs
++++ b/crates/horizon-mod-wasm/src/module_cache.rs
+@@ -148,7 +148,8 @@ impl ModuleCache {
+         bytes: &[u8],
+     ) -> wasmtime::Result<(Module, Source)> {
+         #[cfg(unix)]
+-        let child = if cfg!(test) {
++        // iMC (iOS): an app cannot start the compile child (no fork/exec), so a miss compiles in this process.
++        let child = if cfg!(test) || cfg!(target_os = "ios") {
+             None
+         } else {
+             Some((
+diff --git a/crates/horizon-mod-wasm/src/runtime.rs b/crates/horizon-mod-wasm/src/runtime.rs
+index c487e6ba..8df1df2b 100644
+--- a/crates/horizon-mod-wasm/src/runtime.rs
++++ b/crates/horizon-mod-wasm/src/runtime.rs
+@@ -178,15 +178,34 @@ pub(crate) fn engine_config() -> wasmtime::Config {
+     let mut config = wasmtime::Config::new();
+     without_threads(&mut config);
+     config.epoch_interruption(ENGINE_CONFIG.1);
+-    config.max_wasm_stack(horizon_guest_stack::GUEST_STACK_BYTES);
+-    // Wasmtime validates this bound even for synchronous engines. No async
+-    // support or fiber execution is enabled by setting its size.
+-    config.async_stack_size(
+-        horizon_guest_stack::GUEST_STACK_BYTES + horizon_guest_stack::HOST_HEADROOM,
+-    );
++    #[cfg(not(target_os = "ios"))]
++    {
++        config.max_wasm_stack(horizon_guest_stack::GUEST_STACK_BYTES);
++        // Wasmtime validates this bound even for synchronous engines. No async
++        // support or fiber execution is enabled by setting its size.
++        config.async_stack_size(
++            horizon_guest_stack::GUEST_STACK_BYTES + horizon_guest_stack::HOST_HEADROOM,
++        );
++    }
++    // iMC (iOS): an app cannot make memory executable, so Cranelift's machine code cannot run. Mods are
++    // compiled to Pulley bytecode and run by Wasmtime's interpreter, which needs no executable memory
++    // (docs/HORIZON_CHANGES.md section S). Its wasm frames live on a stack of its own, sized by
++    // `max_wasm_stack` and taken from the heap, so that bound is far below the desktop's 128 MiB.
++    #[cfg(target_os = "ios")]
++    {
++        config
++            .target("pulley64")
++            .expect("the pulley feature of wasmtime is built in");
++        config.max_wasm_stack(IOS_WASM_STACK_BYTES);
++        config.async_stack_size(IOS_WASM_STACK_BYTES + IOS_WASM_STACK_BYTES / 4);
++    }
+     config
+ }
+ 
++/// The wasm stack of an iOS mod: 4 MiB of heap, taken by the interpreter (see [`engine_config`]).
++#[cfg(target_os = "ios")]
++pub(crate) const IOS_WASM_STACK_BYTES: usize = 4 * 1024 * 1024;
++
+ pub(crate) fn engine() -> wasmtime::Result<Engine> {
+     let config = engine_config();
+     let engine = Engine::new(&config)?;
 diff --git a/crates/horizon-threads/src/process_memory.rs b/crates/horizon-threads/src/process_memory.rs
 index 9ee227a6..2d2d2b2d 100644
 --- a/crates/horizon-threads/src/process_memory.rs
