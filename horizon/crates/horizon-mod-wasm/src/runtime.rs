@@ -178,14 +178,33 @@ pub(crate) fn engine_config() -> wasmtime::Config {
     let mut config = wasmtime::Config::new();
     without_threads(&mut config);
     config.epoch_interruption(ENGINE_CONFIG.1);
-    config.max_wasm_stack(horizon_guest_stack::GUEST_STACK_BYTES);
-    // Wasmtime validates this bound even for synchronous engines. No async
-    // support or fiber execution is enabled by setting its size.
-    config.async_stack_size(
-        horizon_guest_stack::GUEST_STACK_BYTES + horizon_guest_stack::HOST_HEADROOM,
-    );
+    #[cfg(not(target_os = "ios"))]
+    {
+        config.max_wasm_stack(horizon_guest_stack::GUEST_STACK_BYTES);
+        // Wasmtime validates this bound even for synchronous engines. No async
+        // support or fiber execution is enabled by setting its size.
+        config.async_stack_size(
+            horizon_guest_stack::GUEST_STACK_BYTES + horizon_guest_stack::HOST_HEADROOM,
+        );
+    }
+    // iMC (iOS): an app cannot make memory executable, so Cranelift's machine code cannot run. Mods are
+    // compiled to Pulley bytecode and run by Wasmtime's interpreter, which needs no executable memory
+    // (docs/HORIZON_CHANGES.md section S). Its wasm frames live on a stack of its own, sized by
+    // `max_wasm_stack` and taken from the heap, so that bound is far below the desktop's 128 MiB.
+    #[cfg(target_os = "ios")]
+    {
+        config
+            .target("pulley64")
+            .expect("the pulley feature of wasmtime is built in");
+        config.max_wasm_stack(IOS_WASM_STACK_BYTES);
+        config.async_stack_size(IOS_WASM_STACK_BYTES + IOS_WASM_STACK_BYTES / 4);
+    }
     config
 }
+
+/// The wasm stack of an iOS mod: 4 MiB of heap, taken by the interpreter (see [`engine_config`]).
+#[cfg(target_os = "ios")]
+pub(crate) const IOS_WASM_STACK_BYTES: usize = 4 * 1024 * 1024;
 
 pub(crate) fn engine() -> wasmtime::Result<Engine> {
     let config = engine_config();

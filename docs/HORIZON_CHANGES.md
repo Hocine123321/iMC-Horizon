@@ -702,6 +702,13 @@ Fourth CI finding, `horizon-client`: `horizon/crates/horizon-client/src/game/run
 
 Fifth CI finding, the iOS bridge (`horizon/platform/ios-bridge`): upstream moved the global allocator into `horizon-client`'s library and replaced `entry::main` with `entry::prepare` + the mod host's `main_with` (what `horizon-game`'s `main` calls). The bridge sets no allocator and starts the engine the same way, skipping `horizon_guest_stack::prepare_main` and the compiler child (an iPhone's main thread cannot be re-executed). It now depends on `horizon-mod-host`, which brings the WASM runtime (`horizon-mod-wasm`, wasmtime) into the iOS build.
 
+**The mod layer for iOS (WASM mods on the Pulley interpreter).** An iOS app cannot make memory executable and cannot fork, so Wasmtime's native code and upstream's compile child cannot be used. Four small, iOS-gated edits (nothing changes on other platforms):
+- `horizon/crates/horizon-mod-wasm/src/runtime.rs`: on iOS the engine targets `pulley64` (bytecode, run by the interpreter, no executable memory) and its wasm stack is 4 MiB of heap instead of the desktop's 128 MiB.
+- `horizon/crates/horizon-mod-wasm/src/module_cache.rs`: on iOS a cache miss compiles in this process instead of starting the compile child.
+- `horizon/crates/horizon-guest-stack/src/lib.rs`: on iOS a thread that enters a mod needs 512 KiB of stack (the host's frames around the interpreter), not 136 MiB; the main thread has 1 MiB.
+- `horizon/crates/horizon-mod-package/src/runtime_leases/filesystem.rs`: the macOS filesystem check (APFS) applies to every Apple platform, iOS included (`target_vendor = "apple"`).
+Not tested on a device. Mods that ship as WebAssembly (`[wasm]` in their manifest, such as Zoom and FPS Counter in the official registry) are what this runs; the registry's source-only native mods still need building to WebAssembly first.
+
 Known gaps, not yet done: `horizon-mod-package/src/runtime_leases/filesystem.rs` answers "unsupported filesystem" on iOS (it lists Linux, macOS and
 Windows only), and `holder` / `local_control` are compiled only on those three; the new mod runtime will need both for iOS.
 

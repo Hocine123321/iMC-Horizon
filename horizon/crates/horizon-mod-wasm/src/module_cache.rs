@@ -148,7 +148,8 @@ impl ModuleCache {
         bytes: &[u8],
     ) -> wasmtime::Result<(Module, Source)> {
         #[cfg(unix)]
-        let child = if cfg!(test) {
+        // iMC (iOS): an app cannot start the compile child (no fork/exec), so a miss compiles in this process.
+        let child = if cfg!(test) || cfg!(target_os = "ios") {
             None
         } else {
             Some((

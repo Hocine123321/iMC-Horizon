@@ -128,6 +128,10 @@ pub fn check_current() -> Result<(), &'static str> {
 
 const REQUIRED: usize = GUEST_STACK_BYTES + HOST_HEADROOM;
 
+/// What a thread that enters a guest needs on iOS: the host's own frames around the interpreter.
+#[cfg(target_os = "ios")]
+const IOS_HOST_STACK_BYTES: usize = 512 * 1024;
+
 /// A refusal naming what was measured. Leaked once per refusing thread: `check_current` keeps it
 /// for the thread's life.
 #[cfg(any(target_os = "linux", target_vendor = "apple", windows))]
@@ -207,7 +211,13 @@ fn inspect_current() -> Result<(), &'static str> {
     {
         // SAFETY: pthread_self names the live calling thread.
         let size = unsafe { libc::pthread_get_stacksize_np(libc::pthread_self()) };
-        if size < REQUIRED {
+        // iMC (iOS): mods run on Wasmtime's Pulley interpreter, whose wasm frames live on a heap stack of
+        // its own, so the calling thread needs room for the host side only. The main thread has 1 MiB.
+        #[cfg(target_os = "ios")]
+        let required = IOS_HOST_STACK_BYTES;
+        #[cfg(not(target_os = "ios"))]
+        let required = REQUIRED;
+        if size < required {
             return too_small(size, "pthread_get_stacksize_np");
         }
     }
