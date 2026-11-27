@@ -221,6 +221,33 @@ jobs:
           name: xcodebuild-log-${{ matrix.sdk }}
           path: xcodebuild.log
           retention-days: 7
+      # Mods that ship as WebAssembly link against one shared "std" member that the game carries beside its
+      # executable (`horizon-wasm-std.wasm`); without it the game refuses every wasm mod ("this game has no wasm
+      # standard library member"). Desktop builds make it with this tool; here it goes inside the .app, where
+      # `current_exe().with_file_name(..)` finds it. A failure here leaves the app without wasm mods, not without an IPA.
+      - name: Build the wasm standard library member
+        if: matrix.sdk == 'iphoneos'
+        continue-on-error: true
+        working-directory: horizon
+        run: |
+          set -o pipefail
+          mkdir -p ../platform/ios/wasm-std
+          cargo run --locked --release -p cargo-horizon-mod -- wasm-std "$PWD/../platform/ios/wasm-std/horizon-wasm-std.wasm" 2>&1 | tee ../wasm-std.log | tail -25
+          ls -la ../platform/ios/wasm-std
+      - name: Say what the wasm standard library member build did
+        if: matrix.sdk == 'iphoneos' && always()
+        run: |
+          if [ -s platform/ios/wasm-std/horizon-wasm-std.wasm ]; then
+            echo "::notice title=wasm std::built, $(wc -c < platform/ios/wasm-std/horizon-wasm-std.wasm) bytes"
+          else
+            echo "::warning title=wasm std::NOT built; wasm mods will be refused. $(grep -E 'error|Error' wasm-std.log 2>/dev/null | head -8 | tr '\n' '|' | cut -c1-900)"
+          fi
+      - name: Put the wasm standard library member in the app
+        if: matrix.sdk == 'iphoneos'
+        working-directory: platform/ios
+        run: |
+          APP=$(find build/dd -name Horizon.app -maxdepth 6 | head -1)
+          [ -s wasm-std/horizon-wasm-std.wasm ] && cp wasm-std/horizon-wasm-std.wasm "$APP/horizon-wasm-std.wasm" && ls -la "$APP/horizon-wasm-std.wasm" || echo "no wasm std member to add"
       - name: Zip the unsigned app
         if: matrix.sdk == 'iphoneos'
         working-directory: platform/ios
