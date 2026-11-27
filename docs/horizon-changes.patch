@@ -8842,7 +8842,7 @@ index f6796514..db3fe0f9 100644
  pub use horizon_client_input::keybinds;
  pub use horizon_client_input::keymapping;
 diff --git a/horizon/crates/horizon-client/src/game.rs b/horizon/crates/horizon-client/src/game.rs
-index 6442b028..583e0d85 100644
+index 6442b028..e31c3c52 100644
 --- a/horizon/crates/horizon-client/src/game.rs
 +++ b/horizon/crates/horizon-client/src/game.rs
 @@ -120,7 +120,7 @@ use loading_window::{
@@ -9021,16 +9021,18 @@ index 6442b028..583e0d85 100644
          let phase = match Self::mod_phase_for_construction() {
              mod_api::__private::ModPhase::Packages if cfg!(test) => {
                  mod_api::__private::ModPhase::World
-@@ -10425,7 +10491,7 @@ impl<'a> Game<'a> {
+@@ -10424,8 +10490,9 @@ impl<'a> Game<'a> {
+             &gui.atlas.sprites,
              &gui.atlas.translucent,
          );
++        horizon_client::gfx::breadcrumb("Game::new_boxed: building the struct");
          let resource_source = pack.source.clone();
 -        let mut game = Game {
 +        let mut game = Box::new(Game {
              structure_spawns: horizon_client::mobs::spawn_selection::StructureSpawns::load(
                  &options.resources,
              ),
-@@ -10530,6 +10596,8 @@ impl<'a> Game<'a> {
+@@ -10530,6 +10597,8 @@ impl<'a> Game<'a> {
              unclaimed_modifiers: None,
              focus_after_run: None,
              ime_allowed: false,
@@ -9039,7 +9041,7 @@ index 6442b028..583e0d85 100644
              ime_area: None,
              focus_lost: None,
              modifiers: winit::keyboard::ModifiersState::empty(),
-@@ -10683,6 +10751,10 @@ impl<'a> Game<'a> {
+@@ -10683,6 +10752,10 @@ impl<'a> Game<'a> {
              autosaving: false,
              // `computeNextAutosaveInterval` at the clock's 20 ticks a second.
              ticks_until_autosave: 6000,
@@ -9050,16 +9052,17 @@ index 6442b028..583e0d85 100644
              applied_modifiers: Vec::new(),
              experience: Experience::default(),
              orbs: Default::default(),
-@@ -11028,7 +11100,7 @@ impl<'a> Game<'a> {
+@@ -11028,7 +11101,8 @@ impl<'a> Game<'a> {
              requested_camera_type: Default::default(),
              fangs: Default::default(),
              player_model: None,
 -        };
 +        });
++        horizon_client::gfx::breadcrumb("Game::new_boxed: struct built");
          game.reset_entity_residency();
          Ok(game)
      }
-@@ -11128,7 +11200,12 @@ pub(crate) fn run_with(
+@@ -11128,7 +11202,12 @@ pub(crate) fn run_with(
      horizon_world::datafix::set_resources(
          &std::path::absolute(&vanilla_root).unwrap_or_else(|_| vanilla_root.clone()),
      );
@@ -9073,7 +9076,7 @@ index 6442b028..583e0d85 100644
          // The game build started by hand (the release's zip), not by the
          // launcher: a window says where to get it. Scripts and servers get
          // the error.
-@@ -11231,6 +11308,21 @@ pub(crate) fn run_with(
+@@ -11231,6 +11310,21 @@ pub(crate) fn run_with(
      if !synchronous_startup(&options) {
          return run_loading(options, early_settings, vanilla_root, None, started);
      }
@@ -9095,7 +9098,7 @@ index 6442b028..583e0d85 100644
      let mut pack_error = None;
      let selected_root = packs::startup_root(
          &vanilla_root,
-@@ -11287,7 +11379,7 @@ pub(crate) fn run_with(
+@@ -11287,7 +11381,7 @@ pub(crate) fn run_with(
              );
              game.settings.save(&Game::options_path());
          }
@@ -11880,7 +11883,7 @@ index 1bf6a360..981443b5 100644
          } else if o.session_stdin {
              let mut text = String::new();
 diff --git a/horizon/crates/horizon-client/src/game/runtime/loading_screen.rs b/horizon/crates/horizon-client/src/game/runtime/loading_screen.rs
-index 8489455d..1f74a742 100644
+index 8489455d..6109a5b9 100644
 --- a/horizon/crates/horizon-client/src/game/runtime/loading_screen.rs
 +++ b/horizon/crates/horizon-client/src/game/runtime/loading_screen.rs
 @@ -112,9 +112,14 @@ impl Loading {
@@ -12049,7 +12052,7 @@ index 8489455d..1f74a742 100644
          // Audio is created on the main thread, after the core is ready.
          let audio = if !options.execution_role.is_client() {
              Audio::silent(&loaded.pack.source)
-@@ -376,10 +459,20 @@ impl Loading {
+@@ -376,10 +459,21 @@ impl Loading {
          let pack_error = loaded.pack_error.or_else(|| self.pack_error.take());
          // The game borrows its shared resources for the process's lifetime,
          // like the single copy an integrated server would share.
@@ -12063,6 +12066,7 @@ index 8489455d..1f74a742 100644
 +        } else {
 +            Box::leak(Box::new(loaded.resources))
 +        };
++        horizon_client::gfx::breadcrumb("finish_game: handing over to start_game");
          let game_at = Instant::now();
          let game_step = startup::step("handoff.start_game");
 -        let Some(mut game) = start_game(
@@ -12072,7 +12076,7 @@ index 8489455d..1f74a742 100644
              res,
              loaded.pack,
              gui,
-@@ -393,12 +486,34 @@ impl Loading {
+@@ -393,12 +487,34 @@ impl Loading {
              loaded.game_cpu,
              std::mem::take(&mut loaded.client_applies),
              loaded.entity_models,
@@ -12110,7 +12114,7 @@ index 8489455d..1f74a742 100644
          game.renderer = Some(renderer);
          game.resize_state = Some(game.resize_state_of(window.inner_size()));
          game.window = Some(window);
-@@ -420,27 +535,158 @@ impl Loading {
+@@ -420,27 +536,158 @@ impl Loading {
              renderer_ms,
              game_ms
          );
@@ -12270,7 +12274,7 @@ index 8489455d..1f74a742 100644
          }
      }
      fn device_event(&mut self, event_loop: &ActiveEventLoop, id: DeviceId, event: DeviceEvent) {
-@@ -454,11 +700,31 @@ impl ApplicationHandler for App {
+@@ -454,11 +701,31 @@ impl ApplicationHandler for App {
              Ready(Box<split::Split<'static>>),
              Done,
              Failed(Box<dyn std::error::Error>),
@@ -12303,7 +12307,7 @@ index 8489455d..1f74a742 100644
              }
              App::Loading(loading) => {
                  loading.about_to_wait(event_loop);
-@@ -466,22 +732,28 @@ impl ApplicationHandler for App {
+@@ -466,22 +733,28 @@ impl ApplicationHandler for App {
                      event_loop.exit();
                      return;
                  }
@@ -12344,7 +12348,7 @@ index 8489455d..1f74a742 100644
              Step::Ready(game) => *self = App::Ready(game),
              Step::Done => event_loop.exit(),
 diff --git a/horizon/crates/horizon-client/src/game/runtime/loading_window.rs b/horizon/crates/horizon-client/src/game/runtime/loading_window.rs
-index d7a126d9..34173edf 100644
+index d7a126d9..9aefd550 100644
 --- a/horizon/crates/horizon-client/src/game/runtime/loading_window.rs
 +++ b/horizon/crates/horizon-client/src/game/runtime/loading_window.rs
 @@ -122,6 +122,8 @@ pub(super) fn build_renderer(
@@ -12365,15 +12369,40 @@ index d7a126d9..34173edf 100644
      let handoff = prepared.is_some();
      let mut settings = match settings {
          Some(settings) => settings,
-@@ -314,7 +316,7 @@ pub(super) fn start_game<'a>(
+@@ -314,7 +316,9 @@ pub(super) fn start_game<'a>(
              entity_models.as_deref(),
          )?),
      };
 -    let mut game = Game::new(res, pack, gui, options, settings, audio, prepared)?;
++    horizon_client::gfx::breadcrumb("start_game: creating the Game");
 +    let mut game = Game::new_boxed(res, pack, gui, options, settings, audio, prepared)?;
++    horizon_client::gfx::breadcrumb("start_game: Game created");
      // `new DebugRenderer()` refreshes its list.
      game.refresh_debug_renderers();
      game.rest_loader = rest_loader;
+@@ -336,15 +340,22 @@ pub(super) fn start_game<'a>(
+     game.apply_settings();
+     // Benchmarks measure the game alone.
+     if game.options.benchmark.is_none() {
++        horizon_client::gfx::breadcrumb("start_game: starting mods");
+         game.start_mods();
++        horizon_client::gfx::breadcrumb("start_game: mods started");
+     }
+     // The initial load's client reload listeners, registered and staged by
+     // the loader thread, publish now that the game owns the assets.
++    horizon_client::gfx::breadcrumb("start_game: applying client reload");
+     client_reload::apply_client_reload(&game.mod_phase, client_applies);
++    horizon_client::gfx::breadcrumb("start_game: refresh_loop_context");
+     game.refresh_loop_context()?;
+     // After the mods: their templates are among the ids it lists.
++    horizon_client::gfx::breadcrumb("start_game: preload_registries");
+     game.preload_registries();
++    horizon_client::gfx::breadcrumb("start_game: start_agent_control");
+     game.start_agent_control()?;
++    horizon_client::gfx::breadcrumb("start_game: setup done");
+     if let Some(scenario) = game.options.benchmark.clone() {
+         let control = game
+             .control
 diff --git a/horizon/crates/horizon-client/src/game/runtime/no_resources.rs b/horizon/crates/horizon-client/src/game/runtime/no_resources.rs
 index 21bf36ad..348d2ca0 100644
 --- a/horizon/crates/horizon-client/src/game/runtime/no_resources.rs
