@@ -10490,6 +10490,7 @@ impl<'a> Game<'a> {
             &gui.atlas.sprites,
             &gui.atlas.translucent,
         );
+        horizon_client::gfx::breadcrumb("Game::new_boxed: building the struct");
         let resource_source = pack.source.clone();
         let mut game = Box::new(Game {
             structure_spawns: horizon_client::mobs::spawn_selection::StructureSpawns::load(
@@ -11101,6 +11102,7 @@ impl<'a> Game<'a> {
             fangs: Default::default(),
             player_model: None,
         });
+        horizon_client::gfx::breadcrumb("Game::new_boxed: struct built");
         game.reset_entity_residency();
         Ok(game)
     }

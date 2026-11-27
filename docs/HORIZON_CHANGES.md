@@ -709,6 +709,8 @@ Fifth CI finding, the iOS bridge (`horizon/platform/ios-bridge`): upstream moved
 - `horizon/crates/horizon-mod-package/src/runtime_leases/filesystem.rs`: the macOS filesystem check (APFS) applies to every Apple platform, iOS included (`target_vendor = "apple"`).
 Not tested on a device. Mods that ship as WebAssembly (`[wasm]` in their manifest, such as Zoom and FPS Counter in the official registry) are what this runs; the registry's source-only native mods still need building to WebAssembly first.
 
+Diagnostics added after the first phone test (breadcrumbs only, no behaviour change): `horizon/crates/horizon-client/src/game/runtime/loading_window.rs` (`start_game`), `horizon/crates/horizon-client/src/game/runtime/loading_screen.rs` (`finish_game`) and `horizon/crates/horizon-client/src/game.rs` (`Game::new_boxed`) leave a breadcrumb before and after each step of creating the game, because the phone froze between "finish: world renderer ready" and "finish: game started".
+
 Known gaps, not yet done: `horizon-mod-package/src/runtime_leases/filesystem.rs` answers "unsupported filesystem" on iOS (it lists Linux, macOS and
 Windows only), and `holder` / `local_control` are compiled only on those three; the new mod runtime will need both for iOS.
 

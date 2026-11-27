@@ -239,6 +239,34 @@ jobs:
         run: |
           if [ -s platform/ios/wasm-std/horizon-wasm-std.wasm ]; then
             echo "::notice title=wasm std::built, $(wc -c < platform/ios/wasm-std/horizon-wasm-std.wasm) bytes"
+            # What the file exports: a mod that imports a symbol the std member does not export is refused
+            # ("which no earlier member has"), so the names around `handle_alloc_error` show whether the
+            # member lacks it or carries it under another crate hash.
+            python3 - <<'PY'
+          import sys
+          d = open("platform/ios/wasm-std/horizon-wasm-std.wasm", "rb").read()
+          def leb(i):
+              r = s = 0
+              while True:
+                  b = d[i]; i += 1
+                  r |= (b & 0x7f) << s; s += 7
+                  if not b & 0x80: return r, i
+          i = 8; exports = []; imports = 0
+          while i < len(d):
+              sid = d[i]; i += 1
+              size, i = leb(i); end = i + size
+              if sid == 7:
+                  n, j = leb(i)
+                  for _ in range(n):
+                      L, j = leb(j); name = d[j:j+L].decode("utf8", "replace"); j += L
+                      exports.append(name); j += 1; _, j = leb(j)
+              elif sid == 2:
+                  imports, _ = leb(i)
+              i = end
+          hits = [e for e in exports if "handle_alloc_error" in e]
+          alloc = sorted({e.split("5alloc")[0][-20:] for e in exports if "5alloc5alloc" in e})[:6]
+          print("::notice title=wasm std exports::%d exports, %d imports; handle_alloc_error: %s; alloc prefixes: %s" % (len(exports), imports, hits[:4], alloc))
+          PY
           else
             echo "::warning title=wasm std::NOT built; wasm mods will be refused. $(grep -E 'error|Error' wasm-std.log 2>/dev/null | head -8 | tr '\n' '|' | cut -c1-900)"
           fi

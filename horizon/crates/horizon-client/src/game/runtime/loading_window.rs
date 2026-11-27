@@ -316,7 +316,9 @@ pub(super) fn start_game<'a>(
             entity_models.as_deref(),
         )?),
     };
+    horizon_client::gfx::breadcrumb("start_game: creating the Game");
     let mut game = Game::new_boxed(res, pack, gui, options, settings, audio, prepared)?;
+    horizon_client::gfx::breadcrumb("start_game: Game created");
     // `new DebugRenderer()` refreshes its list.
     game.refresh_debug_renderers();
     game.rest_loader = rest_loader;
@@ -338,15 +340,22 @@ pub(super) fn start_game<'a>(
     game.apply_settings();
     // Benchmarks measure the game alone.
     if game.options.benchmark.is_none() {
+        horizon_client::gfx::breadcrumb("start_game: starting mods");
         game.start_mods();
+        horizon_client::gfx::breadcrumb("start_game: mods started");
     }
     // The initial load's client reload listeners, registered and staged by
     // the loader thread, publish now that the game owns the assets.
+    horizon_client::gfx::breadcrumb("start_game: applying client reload");
     client_reload::apply_client_reload(&game.mod_phase, client_applies);
+    horizon_client::gfx::breadcrumb("start_game: refresh_loop_context");
     game.refresh_loop_context()?;
     // After the mods: their templates are among the ids it lists.
+    horizon_client::gfx::breadcrumb("start_game: preload_registries");
     game.preload_registries();
+    horizon_client::gfx::breadcrumb("start_game: start_agent_control");
     game.start_agent_control()?;
+    horizon_client::gfx::breadcrumb("start_game: setup done");
     if let Some(scenario) = game.options.benchmark.clone() {
         let control = game
             .control

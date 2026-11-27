@@ -468,6 +468,7 @@ impl Loading {
         } else {
             Box::leak(Box::new(loaded.resources))
         };
+        horizon_client::gfx::breadcrumb("finish_game: handing over to start_game");
         let game_at = Instant::now();
         let game_step = startup::step("handoff.start_game");
         // The `Game` is on the heap from `Game::new_boxed` on, so this frame only holds a pointer
